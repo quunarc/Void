@@ -190,7 +190,7 @@ add_library(External STATIC
     vender/imgui/imstb_rectpack.h
     vender/imgui/imstb_textedit.h
     vender/imgui/imstb_truetype.h
-    
+
     #vender/tracy/tracy/Tracy.hpp
     #vender/tracy/tracy/TracyVulkan.hpp
     #vender/tracy/TracyClient.cpp

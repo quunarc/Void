@@ -254,9 +254,9 @@ int main(int argc, char** argv)
     uint32_t totalDucks = 1111;
     Array<mat4s> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
+
     Array<Entity> entities;
     entities.init(allocator, totalDucks, totalDucks);
-
     constexpr uint32_t rockModelIndex = 0;
     constexpr uint32_t duckModelIndex = 1;
     Array<Model> models;
@@ -457,7 +457,6 @@ int main(int argc, char** argv)
             }
 
             gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
-            //Only do this once.
             gpuCommands->bindlessDescriptorSet(1);
 
             gpuCommands->draw(36, 1, 0, 0);
@@ -467,7 +466,6 @@ int main(int argc, char** argv)
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
 
-            //Only do this once.
             gpuCommands->bindlessDescriptorSet(1);
 
             mat4s globalModel{};
@@ -493,7 +491,7 @@ int main(int argc, char** argv)
 
             for (uint32_t i = 0; i < positionalMatrixSize; ++i)
             {
-                ((mat4s*)positionBuf->mappedMemory)[i] = glms_translate(((mat4s*)positionBuf->mappedMemory)[i], newPosition);
+                positionBufferData[i] = glms_translate(positionBufferData[i], newPosition);
             }
            
             pushConstants.modelPositionAddress = positionBuf->bufferAddress;

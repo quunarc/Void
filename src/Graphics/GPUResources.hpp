@@ -545,11 +545,10 @@ struct Buffer
     uint32_t size = 0;
     uint32_t globalOffset = 0;
 
-    BufferHandle handle;
-    BufferHandle parentBuffer;
+    BufferHandle handle = INVALID_BUFFER;
+    BufferHandle parentBuffer = INVALID_BUFFER;
 
     const char* name = nullptr;
-    void* mappedMemory = nullptr;
 };
 
 struct Sampler 
