@@ -25,6 +25,3 @@
 [submodule "vender/meshoptimizer"]
 	path = vender/meshoptimizer
 	url = https://github.com/zeux/meshoptimizer.git
-[submodule "vender/JoltPhysics"]
-	path = vender/JoltPhysics
-	url = https://github.com/jrouwe/JoltPhysics.git

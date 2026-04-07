@@ -8,3 +8,6 @@ Vulkan 3D driven game engine. This game engine I'm developing is going to suppor
 
 ### Project goals
 The goal of this game engine is to support 3D game engine development while leveraging new and interesting graphics techniques that support modern hardware with Vulkan. This is engine is going to combine all my work I have done throughtout the years when working on other game engines. I development some of this game engine live on YouTube at https://www.youtube.com/@EscPointDev feel free to drop in a see what I'm up to.
+
+### Physics
+The physics in this engine is using the Jolt Physics engine https://github.com/jrouwe/JoltPhysics

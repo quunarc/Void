@@ -19,6 +19,9 @@
 #include "Foundation/File.hpp"
 #include "Foundation/Numerics.hpp"
 #include "Foundation/Time.hpp"
+#include "Foundation/Array.hpp"
+
+#include "Physics/Physics.hpp"
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
@@ -190,6 +193,9 @@ int main(int argc, char** argv)
     ImguiService* imgui = ImguiService::instance();
     ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
     imgui->init(&imguiConfig);
+
+    Physics physics;
+    //physics.initPhysics();
 
     //Window::instance()->setFullscreen(true);
 
@@ -450,6 +456,8 @@ int main(int argc, char** argv)
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
+            physics.updatePhysics();
+
             CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
             gpuCommands->pushMarker("Frame");
 
@@ -571,6 +579,8 @@ int main(int argc, char** argv)
     }
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
+
+    //physics.shutdownPhysics();
 
     gpu.unmapBuffer(cbMap);
     gpu.unmapBuffer(skyboxMaterialMap);
