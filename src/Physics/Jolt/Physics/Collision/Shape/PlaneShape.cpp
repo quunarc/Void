@@ -14,7 +14,6 @@
 #include <Jolt/Physics/Collision/CollisionDispatch.h>
 #include <Jolt/Physics/Collision/TransformedShape.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
-#include <Jolt/Physics/Collision/CollideSoftBodyVertexIterator.h>
 #include <Jolt/Core/Profiler.h>
 #include <Jolt/Core/StreamIn.h>
 #include <Jolt/Core/StreamOut.h>
@@ -244,23 +243,6 @@ void PlaneShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubSha
 	// Check if the point is inside the plane
 	if (mPlane.SignedDistance(inPoint) < 0.0f)
 		ioCollector.AddHit({ TransformedShape::sGetBodyID(ioCollector.GetContext()), inSubShapeIDCreator.GetID() });
-}
-
-void PlaneShape::CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const
-{
-	JPH_PROFILE_FUNCTION();
-
-	// Convert plane to world space
-	Plane plane = mPlane.Scaled(inScale).GetTransformed(inCenterOfMassTransform);
-
-	for (CollideSoftBodyVertexIterator v = inVertices, sbv_end = inVertices + inNumVertices; v != sbv_end; ++v)
-		if (v.GetInvMass() > 0.0f)
-		{
-			// Calculate penetration
-			float penetration = -plane.SignedDistance(v.GetPosition());
-			if (v.UpdatePenetration(penetration))
-				v.SetCollision(plane, inCollidingShapeIndex);
-		}
 }
 
 // This is a version of GetSupportingFace that returns a face that is large enough to cover the shape we're colliding with but not as large as the regular GetSupportedFace to avoid numerical precision issues

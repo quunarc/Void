@@ -24,8 +24,6 @@
 #include <Jolt/Physics/Constraints/CalculateSolverSteps.h>
 #include <Jolt/Physics/Constraints/ConstraintPart/AxisConstraintPart.h>
 #include <Jolt/Physics/DeterminismLog.h>
-#include <Jolt/Physics/SoftBody/SoftBodyMotionProperties.h>
-#include <Jolt/Physics/SoftBody/SoftBodyShape.h>
 #include <Jolt/Geometry/RayAABox.h>
 #include <Jolt/Geometry/ClosestPoint.h>
 #include <Jolt/Core/JobSystem.h>
@@ -566,7 +564,6 @@ EPhysicsUpdateError PhysicsSystem::Update(float inDeltaTime, int inCollisionStep
 			// The soft body prepare job will create other jobs if needed
 			step.mSoftBodyPrepare = inJobSystem->CreateJob("SoftBodyPrepare", cColorSoftBodyPrepare, [&context, &step]()
 				{
-					context.mPhysicsSystem->JobSoftBodyPrepare(&context, &step);
 				}, max_concurrency); // depends on: solve position constraints.
 
 			// Unblock previous jobs
@@ -2248,56 +2245,6 @@ void PhysicsSystem::JobResolveCCDContacts(PhysicsUpdateContext *ioContext, Physi
 							body2_mp->ClampAngularVelocity();
 						}
 					}
-					else
-					{
-						SoftBodyMotionProperties *soft_mp = static_cast<SoftBodyMotionProperties *>(body2.GetMotionProperties());
-						const SoftBodyShape *soft_shape = static_cast<const SoftBodyShape *>(body2.GetShape());
-
-						// Convert the sub shape ID of the soft body to a face
-						uint32 face_idx = soft_shape->GetFaceIndex(ccd_body->mSubShapeID2);
-						const SoftBodyMotionProperties::Face &face = soft_mp->GetFace(face_idx);
-
-						// Get vertices of the face
-						SoftBodyMotionProperties::Vertex &vtx0 = soft_mp->GetVertex(face.mVertex[0]);
-						SoftBodyMotionProperties::Vertex &vtx1 = soft_mp->GetVertex(face.mVertex[1]);
-						SoftBodyMotionProperties::Vertex &vtx2 = soft_mp->GetVertex(face.mVertex[2]);
-
-						// Inverse mass of the face
-						float vtx0_mass = vtx0.mInvMass > 0.0f? 1.0f / vtx0.mInvMass : 1.0e10f;
-						float vtx1_mass = vtx1.mInvMass > 0.0f? 1.0f / vtx1.mInvMass : 1.0e10f;
-						float vtx2_mass = vtx2.mInvMass > 0.0f? 1.0f / vtx2.mInvMass : 1.0e10f;
-						float inv_m2 = 1.0f / (vtx0_mass + vtx1_mass + vtx2_mass);
-
-						// Calculate barycentric coordinates of the contact point on the soft body's face
-						float u, v, w;
-						RMat44 inv_body2_transform = body2.GetInverseCenterOfMassTransform();
-						Vec3 local_contact = Vec3(inv_body2_transform * ccd_body->mContactPointOn2);
-						ClosestPoint::GetBaryCentricCoordinates(vtx0.mPosition - local_contact, vtx1.mPosition - local_contact, vtx2.mPosition - local_contact, u, v, w);
-
-						// Calculate contact point velocity for the face
-						Vec3 v2 = inv_body2_transform.Multiply3x3Transposed(u * vtx0.mVelocity + v * vtx1.mVelocity + w * vtx2.mVelocity);
-						float normal_velocity = (v2 - v1).Dot(ccd_body->mContactNormal);
-
-						// Calculate velocity bias due to restitution
-						float normal_velocity_bias;
-						if (contact_settings.mCombinedRestitution > 0.0f && normal_velocity < -mPhysicsSettings.mMinVelocityForRestitution)
-							normal_velocity_bias = contact_settings.mCombinedRestitution * normal_velocity;
-						else
-							normal_velocity_bias = 0.0f;
-
-						// Calculate resulting velocity change (the math here is similar to AxisConstraintPart but without an inertia term for body 2 as we treat it as a point mass)
-						Vec3 r1_plus_u_x_n = r1_plus_u.Cross(ccd_body->mContactNormal);
-						Vec3 invi1_r1_plus_u_x_n = contact_settings.mInvInertiaScale1 * body1.GetInverseInertia().Multiply3x3(r1_plus_u_x_n);
-						float jv = r1_plus_u_x_n.Dot(body_mp->GetAngularVelocity()) - normal_velocity - normal_velocity_bias;
-						float inv_effective_mass = inv_m1 + inv_m2 + invi1_r1_plus_u_x_n.Dot(r1_plus_u_x_n);
-						float lambda = jv / inv_effective_mass;
-						body_mp->SubLinearVelocityStep((lambda * inv_m1) * ccd_body->mContactNormal);
-						body_mp->SubAngularVelocityStep(lambda * invi1_r1_plus_u_x_n);
-						Vec3 delta_v2 = inv_body2_transform.Multiply3x3(lambda * ccd_body->mContactNormal);
-						vtx0.mVelocity += delta_v2 * vtx0.mInvMass;
-						vtx1.mVelocity += delta_v2 * vtx1.mInvMass;
-						vtx2.mVelocity += delta_v2 * vtx2.mInvMass;
-					}
 
 					// Clamp velocity of body 1
 					body_mp->ClampLinearVelocity();
@@ -2634,204 +2581,6 @@ void PhysicsSystem::JobSolvePositionConstraints(PhysicsUpdateContext *ioContext,
 			break;
 		}
 	}
-}
-
-void PhysicsSystem::JobSoftBodyPrepare(PhysicsUpdateContext *ioContext, PhysicsUpdateContext::Step *ioStep)
-{
-	JPH_PROFILE_FUNCTION();
-
-	{
-	#ifdef JPH_ENABLE_ASSERTS
-		// Reading soft body positions
-		BodyAccess::Grant grant(BodyAccess::EAccess::None, BodyAccess::EAccess::Read);
-	#endif
-
-		// Get the active soft bodies
-		BodyIDVector active_bodies;
-		mBodyManager.GetActiveBodies(EBodyType::SoftBody, active_bodies);
-
-		// Quit if there are no active soft bodies
-		if (active_bodies.empty())
-		{
-			// Kick the next step
-			if (ioStep->mStartNextStep.IsValid())
-				ioStep->mStartNextStep.RemoveDependency();
-			return;
-		}
-
-		// Sort to get a deterministic update order
-		QuickSort(active_bodies.begin(), active_bodies.end());
-
-		// Allocate soft body contexts
-		ioContext->mNumSoftBodies = (uint)active_bodies.size();
-		ioContext->mSoftBodyUpdateContexts = (SoftBodyUpdateContext *)ioContext->mTempAllocator->Allocate(ioContext->mNumSoftBodies * sizeof(SoftBodyUpdateContext));
-
-		// Initialize soft body contexts
-		for (SoftBodyUpdateContext *sb_ctx = ioContext->mSoftBodyUpdateContexts, *sb_ctx_end = ioContext->mSoftBodyUpdateContexts + ioContext->mNumSoftBodies; sb_ctx < sb_ctx_end; ++sb_ctx)
-		{
-			new (sb_ctx) SoftBodyUpdateContext;
-			Body &body = mBodyManager.GetBody(active_bodies[sb_ctx - ioContext->mSoftBodyUpdateContexts]);
-			SoftBodyMotionProperties *mp = static_cast<SoftBodyMotionProperties *>(body.GetMotionProperties());
-			mp->InitializeUpdateContext(ioContext->mStepDeltaTime, body, *this, *sb_ctx);
-		}
-	}
-
-	// We're ready to collide the first soft body
-	ioContext->mSoftBodyToCollide.store(0, memory_order_release);
-
-	// Determine number of jobs to spawn
-	int num_soft_body_jobs = ioContext->GetMaxConcurrency();
-
-	// Create finalize job
-	ioStep->mSoftBodyFinalize = ioContext->mJobSystem->CreateJob("SoftBodyFinalize", cColorSoftBodyFinalize, [ioContext, ioStep]()
-	{
-		ioContext->mPhysicsSystem->JobSoftBodyFinalize(ioContext);
-
-		// Kick the next step
-		if (ioStep->mStartNextStep.IsValid())
-			ioStep->mStartNextStep.RemoveDependency();
-	}, num_soft_body_jobs); // depends on: soft body simulate
-	ioContext->mBarrier->AddJob(ioStep->mSoftBodyFinalize);
-
-	// Create simulate jobs
-	ioStep->mSoftBodySimulate.resize(num_soft_body_jobs);
-	for (int i = 0; i < num_soft_body_jobs; ++i)
-		ioStep->mSoftBodySimulate[i] = ioContext->mJobSystem->CreateJob("SoftBodySimulate", cColorSoftBodySimulate, [ioStep, i]()
-			{
-				ioStep->mContext->mPhysicsSystem->JobSoftBodySimulate(ioStep->mContext, i);
-
-				ioStep->mSoftBodyFinalize.RemoveDependency();
-			}, num_soft_body_jobs); // depends on: soft body collide
-	ioContext->mBarrier->AddJobs(ioStep->mSoftBodySimulate.data(), ioStep->mSoftBodySimulate.size());
-
-	// Create collision jobs
-	ioStep->mSoftBodyCollide.resize(num_soft_body_jobs);
-	for (int i = 0; i < num_soft_body_jobs; ++i)
-		ioStep->mSoftBodyCollide[i] = ioContext->mJobSystem->CreateJob("SoftBodyCollide", cColorSoftBodyCollide, [ioContext, ioStep]()
-			{
-				ioContext->mPhysicsSystem->JobSoftBodyCollide(ioContext);
-
-				for (const JobHandle &h : ioStep->mSoftBodySimulate)
-					h.RemoveDependency();
-			}); // depends on: nothing
-	ioContext->mBarrier->AddJobs(ioStep->mSoftBodyCollide.data(), ioStep->mSoftBodyCollide.size());
-}
-
-void PhysicsSystem::JobSoftBodyCollide(PhysicsUpdateContext *ioContext) const
-{
-#ifdef JPH_ENABLE_ASSERTS
-	// Reading rigid body positions and velocities
-	BodyAccess::Grant grant(BodyAccess::EAccess::Read, BodyAccess::EAccess::Read);
-#endif
-
-	for (;;)
-	{
-		// Fetch the next soft body
-		uint sb_idx = ioContext->mSoftBodyToCollide.fetch_add(1, std::memory_order_acquire);
-		if (sb_idx >= ioContext->mNumSoftBodies)
-			break;
-
-		// Do a broadphase check
-		SoftBodyUpdateContext &sb_ctx = ioContext->mSoftBodyUpdateContexts[sb_idx];
-		sb_ctx.mMotionProperties->DetermineCollidingShapes(sb_ctx, *this, GetBodyLockInterfaceNoLock());
-	}
-}
-
-void PhysicsSystem::JobSoftBodySimulate(PhysicsUpdateContext *ioContext, uint inThreadIndex) const
-{
-#ifdef JPH_ENABLE_ASSERTS
-	// Updating velocities of soft bodies, allow the contact listener to read the soft body state
-	BodyAccess::Grant grant(BodyAccess::EAccess::ReadWrite, BodyAccess::EAccess::Read);
-#endif
-
-	// Calculate at which body we start to distribute the workload across the threads
-	uint num_soft_bodies = ioContext->mNumSoftBodies;
-	uint start_idx = inThreadIndex * num_soft_bodies / ioContext->GetMaxConcurrency();
-
-	// Keep running partial updates until everything has been updated
-	uint status;
-	do
-	{
-		// Reset status
-		status = 0;
-
-		// Update all soft bodies
-		for (uint i = 0; i < num_soft_bodies; ++i)
-		{
-			// Fetch the soft body context
-			SoftBodyUpdateContext &sb_ctx = ioContext->mSoftBodyUpdateContexts[(start_idx + i) % num_soft_bodies];
-
-			// To avoid trashing the cache too much, we prefer to stick to one soft body until we cannot progress it any further
-			uint sb_status;
-			do
-			{
-				sb_status = (uint)sb_ctx.mMotionProperties->ParallelUpdate(sb_ctx, mPhysicsSettings);
-				status |= sb_status;
-			} while (sb_status == (uint)SoftBodyMotionProperties::EStatus::DidWork);
-		}
-
-		// If we didn't perform any work, yield the thread so that something else can run
-		if (!(status & (uint)SoftBodyMotionProperties::EStatus::DidWork))
-			std::this_thread::yield();
-	}
-	while (status != (uint)SoftBodyMotionProperties::EStatus::Done);
-}
-
-void PhysicsSystem::JobSoftBodyFinalize(PhysicsUpdateContext *ioContext)
-{
-#ifdef JPH_ENABLE_ASSERTS
-	// Updating rigid body velocities and soft body positions / velocities
-	BodyAccess::Grant grant(BodyAccess::EAccess::ReadWrite, BodyAccess::EAccess::ReadWrite);
-
-	// Can activate and deactivate bodies
-	BodyManager::GrantActiveBodiesAccess grant_active(true, true);
-#endif
-
-	static constexpr int cBodiesBatch = 64;
-	BodyID *bodies_to_update_bounds = (BodyID *)JPH_STACK_ALLOC(cBodiesBatch * sizeof(BodyID));
-	int num_bodies_to_update_bounds = 0;
-	BodyID *bodies_to_put_to_sleep = (BodyID *)JPH_STACK_ALLOC(cBodiesBatch * sizeof(BodyID));
-	int num_bodies_to_put_to_sleep = 0;
-
-	for (SoftBodyUpdateContext *sb_ctx = ioContext->mSoftBodyUpdateContexts, *sb_ctx_end = ioContext->mSoftBodyUpdateContexts + ioContext->mNumSoftBodies; sb_ctx < sb_ctx_end; ++sb_ctx)
-	{
-		// Apply the rigid body velocity deltas
-		sb_ctx->mMotionProperties->UpdateRigidBodyVelocities(*sb_ctx, GetBodyInterfaceNoLock());
-
-		// Update the position
-		sb_ctx->mBody->SetPositionAndRotationInternal(sb_ctx->mBody->GetPosition() + sb_ctx->mDeltaPosition, sb_ctx->mBody->GetRotation(), false);
-
-		BodyID id = sb_ctx->mBody->GetID();
-		bodies_to_update_bounds[num_bodies_to_update_bounds++] = id;
-		if (num_bodies_to_update_bounds == cBodiesBatch)
-		{
-			// Buffer full, flush now
-			mBroadPhase->NotifyBodiesAABBChanged(bodies_to_update_bounds, num_bodies_to_update_bounds, false);
-			num_bodies_to_update_bounds = 0;
-		}
-
-		if (sb_ctx->mCanSleep == ECanSleep::CanSleep)
-		{
-			// This body should go to sleep
-			bodies_to_put_to_sleep[num_bodies_to_put_to_sleep++] = id;
-			if (num_bodies_to_put_to_sleep == cBodiesBatch)
-			{
-				mBodyManager.DeactivateBodies(bodies_to_put_to_sleep, num_bodies_to_put_to_sleep);
-				num_bodies_to_put_to_sleep = 0;
-			}
-		}
-	}
-
-	// Notify change bounds on requested bodies
-	if (num_bodies_to_update_bounds > 0)
-		mBroadPhase->NotifyBodiesAABBChanged(bodies_to_update_bounds, num_bodies_to_update_bounds, false);
-
-	// Notify bodies to go to sleep
-	if (num_bodies_to_put_to_sleep > 0)
-		mBodyManager.DeactivateBodies(bodies_to_put_to_sleep, num_bodies_to_put_to_sleep);
-
-	// Free soft body contexts
-	ioContext->mTempAllocator->Free(ioContext->mSoftBodyUpdateContexts, ioContext->mNumSoftBodies * sizeof(SoftBodyUpdateContext));
 }
 
 void PhysicsSystem::SaveState(StateRecorder &inStream, EStateRecorderState inState, const StateRecorderFilter *inFilter) const

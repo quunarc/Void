@@ -372,7 +372,6 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Geometry/RayTriangle.h
 	${JOLT_PHYSICS_ROOT}/Geometry/Sphere.h
 	${JOLT_PHYSICS_ROOT}/Geometry/Triangle.h
-	${JOLT_PHYSICS_ROOT}/Jolt.cmake
 	${JOLT_PHYSICS_ROOT}/Jolt.h
 	${JOLT_PHYSICS_ROOT}/Math/BVec16.h
 	${JOLT_PHYSICS_ROOT}/Math/BVec16.inl
@@ -476,8 +475,6 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Physics/Collision/CollidePointResult.h
 	${JOLT_PHYSICS_ROOT}/Physics/Collision/CollideShape.h
 	${JOLT_PHYSICS_ROOT}/Physics/Collision/CollideShapeVsShapePerLeaf.h
-	${JOLT_PHYSICS_ROOT}/Physics/Collision/CollideSoftBodyVertexIterator.h
-	${JOLT_PHYSICS_ROOT}/Physics/Collision/CollideSoftBodyVerticesVsTriangles.h
 	${JOLT_PHYSICS_ROOT}/Physics/Collision/CollideSphereVsTriangles.cpp
 	${JOLT_PHYSICS_ROOT}/Physics/Collision/CollideSphereVsTriangles.h
 	${JOLT_PHYSICS_ROOT}/Physics/Collision/CollisionCollector.h
@@ -637,18 +634,6 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Physics/PhysicsUpdateContext.h
 	${JOLT_PHYSICS_ROOT}/Physics/Ragdoll/Ragdoll.cpp
 	${JOLT_PHYSICS_ROOT}/Physics/Ragdoll/Ragdoll.h
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyContactListener.h
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyCreationSettings.cpp
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyCreationSettings.h
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyManifold.h
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyMotionProperties.cpp
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyMotionProperties.h
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyShape.cpp
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyShape.h
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodySharedSettings.cpp
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodySharedSettings.h
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyUpdateContext.h
-	${JOLT_PHYSICS_ROOT}/Physics/SoftBody/SoftBodyVertex.h
 	${JOLT_PHYSICS_ROOT}/Physics/StateRecorder.h
 	${JOLT_PHYSICS_ROOT}/Physics/StateRecorderImpl.cpp
 	${JOLT_PHYSICS_ROOT}/Physics/StateRecorderImpl.h

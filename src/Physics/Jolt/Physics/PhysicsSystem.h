@@ -20,7 +20,6 @@ class JobSystem;
 class StateRecorder;
 class TempAllocator;
 class PhysicsStepListener;
-class SoftBodyContactListener;
 class SimShapeFilter;
 
 /// The main class for the physics system. It contains all rigid bodies and simulates them.
@@ -66,10 +65,6 @@ public:
 	/// You can't change contact listener during PhysicsSystem::Update but it can be changed at any other time.
 	void						SetContactListener(ContactListener *inListener)				{ mContactManager.SetContactListener(inListener); }
 	ContactListener *			GetContactListener() const									{ return mContactManager.GetContactListener(); }
-
-	/// Listener that is notified whenever a contact point between a soft body and another body
-	void						SetSoftBodyContactListener(SoftBodyContactListener *inListener) { mSoftBodyContactListener = inListener; }
-	SoftBodyContactListener *	GetSoftBodyContactListener() const							{ return mSoftBodyContactListener; }
 
 	/// Set the function that combines the friction of two bodies and returns it
 	/// Default method is the geometric mean: sqrt(friction1 * friction2).
@@ -281,10 +276,6 @@ private:
 	void						JobResolveCCDContacts(PhysicsUpdateContext *ioContext, PhysicsUpdateContext::Step *ioStep);
 	void						JobContactRemovedCallbacks(const PhysicsUpdateContext::Step *ioStep);
 	void						JobSolvePositionConstraints(PhysicsUpdateContext *ioContext, PhysicsUpdateContext::Step *ioStep);
-	void						JobSoftBodyPrepare(PhysicsUpdateContext *ioContext, PhysicsUpdateContext::Step *ioStep);
-	void						JobSoftBodyCollide(PhysicsUpdateContext *ioContext) const;
-	void						JobSoftBodySimulate(PhysicsUpdateContext *ioContext, uint inThreadIndex) const;
-	void						JobSoftBodyFinalize(PhysicsUpdateContext *ioContext);
 
 	/// Tries to spawn a new FindCollisions job if max concurrency hasn't been reached yet
 	void						TrySpawnJobFindCollisions(PhysicsUpdateContext::Step *ioStep) const;
@@ -349,9 +340,6 @@ private:
 
 	/// The broadphase does quick collision detection between body pairs
 	BroadPhase *				mBroadPhase = nullptr;
-
-	/// The soft body contact listener
-	SoftBodyContactListener *	mSoftBodyContactListener = nullptr;
 
 	/// The shape filter that is used to filter out sub shapes during simulation
 	const SimShapeFilter *		mSimShapeFilter = nullptr;

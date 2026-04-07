@@ -9,7 +9,6 @@
 #include <Jolt/Physics/Collision/Shape/ScaleHelpers.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/TransformedShape.h>
-#include <Jolt/Physics/Collision/CollideSoftBodyVertexIterator.h>
 #include <Jolt/ObjectStream/TypeDeclarations.h>
 #include <Jolt/Core/StreamIn.h>
 #include <Jolt/Core/StreamOut.h>
@@ -385,128 +384,6 @@ void TaperedCylinderShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator
 	if (inPoint.GetY() >= mBottom && inPoint.GetY() <= mTop // Within height
 		&& Square(inPoint.GetX()) + Square(inPoint.GetZ()) <= Square(mBottomRadius + (inPoint.GetY() - mBottom) * (mTopRadius - mBottomRadius) / (mTop - mBottom))) // Within the radius
 		ioCollector.AddHit({ TransformedShape::sGetBodyID(ioCollector.GetContext()), inSubShapeIDCreator.GetID() });
-}
-
-void TaperedCylinderShape::CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const
-{
-	JPH_ASSERT(IsValidScale(inScale));
-
-	Mat44 inverse_transform = inCenterOfMassTransform.InversedRotationTranslation();
-
-	// Get scaled tapered cylinder
-	float top, bottom, top_radius, bottom_radius, convex_radius;
-	GetScaled(inScale, top, bottom, top_radius, bottom_radius, convex_radius);
-	Vec3 top_3d(0, top, 0);
-	Vec3 bottom_3d(0, bottom, 0);
-
-	for (CollideSoftBodyVertexIterator v = inVertices, sbv_end = inVertices + inNumVertices; v != sbv_end; ++v)
-		if (v.GetInvMass() > 0.0f)
-		{
-			Vec3 local_pos = inverse_transform * v.GetPosition();
-
-			// Calculate penetration into side surface
-			Vec3 normal_xz = sCalculateSideNormalXZ(local_pos);
-			Vec3 side_normal = sCalculateSideNormal(normal_xz, top, bottom, top_radius, bottom_radius);
-			Vec3 side_support_top = normal_xz * top_radius + top_3d;
-			float side_penetration = (side_support_top - local_pos).Dot(side_normal);
-
-			// Calculate penetration into top and bottom plane
-			float top_penetration = top - local_pos.GetY();
-			float bottom_penetration = local_pos.GetY() - bottom;
-			float min_top_bottom_penetration = min(top_penetration, bottom_penetration);
-
-			Vec3 point, normal;
-			if (side_penetration < 0.0f || min_top_bottom_penetration < 0.0f)
-			{
-				// We're outside the cylinder
-				// Calculate the closest point on the line segment from bottom to top support point:
-				// closest_point = bottom + fraction * (top - bottom) / |top - bottom|^2
-				Vec3 side_support_bottom = normal_xz * bottom_radius + bottom_3d;
-				Vec3 bottom_to_top = side_support_top - side_support_bottom;
-				float fraction = (local_pos - side_support_bottom).Dot(bottom_to_top);
-
-				// Calculate the distance to the axis of the cylinder
-				float distance_to_axis = normal_xz.Dot(local_pos);
-				bool inside_top_radius = distance_to_axis <= top_radius;
-				bool inside_bottom_radius = distance_to_axis <= bottom_radius;
-
-				/*
-					Regions of tapered cylinder (side view):
-
-						_  B |       |
-						 --_ |   A   |
-							 t-------+
-					   C    /         \
-						   /  tapered  \
-					_     /  cylinder   \
-					 --_ /               \
-						b-----------------+
-					 D  |        E        |
-						|                 |
-
-					t = side_support_top, b = side_support_bottom
-					Lines between B and C and C and D are at a 90 degree angle to the line between t and b
-				*/
-				if (fraction >= bottom_to_top.LengthSq() // Region B: Above the line segment
-					&& !inside_top_radius) // Outside the top radius
-				{
-					// Top support point is closest
-					point = side_support_top;
-					normal = (local_pos - point).NormalizedOr(Vec3::sAxisY());
-				}
-				else if (fraction < 0.0f // Region D: Below the line segment
-					&& !inside_bottom_radius) // Outside the bottom radius
-				{
-					// Bottom support point is closest
-					point = side_support_bottom;
-					normal = (local_pos - point).NormalizedOr(Vec3::sAxisY());
-				}
-				else if (top_penetration < 0.0f // Region A: Above the top plane
-					&& inside_top_radius) // Inside the top radius
-				{
-					// Top plane is closest
-					point = top_3d;
-					normal = Vec3(0, 1, 0);
-				}
-				else if (bottom_penetration < 0.0f // Region E: Below the bottom plane
-					&& inside_bottom_radius) // Inside the bottom radius
-				{
-					// Bottom plane is closest
-					point = bottom_3d;
-					normal = Vec3(0, -1, 0);
-				}
-				else // Region C
-				{
-					// Side surface is closest
-					point = side_support_top;
-					normal = side_normal;
-				}
-			}
-			else if (side_penetration < min_top_bottom_penetration)
-			{
-				// Side surface is closest
-				point = side_support_top;
-				normal = side_normal;
-			}
-			else if (top_penetration < bottom_penetration)
-			{
-				// Top plane is closest
-				point = top_3d;
-				normal = Vec3(0, 1, 0);
-			}
-			else
-			{
-				// Bottom plane is closest
-				point = bottom_3d;
-				normal = Vec3(0, -1, 0);
-			}
-
-			// Calculate penetration
-			Plane plane = Plane::sFromPointAndNormal(point, normal);
-			float penetration = -plane.SignedDistance(local_pos);
-			if (v.UpdatePenetration(penetration))
-				v.SetCollision(plane.GetTransformed(inCenterOfMassTransform), inCollidingShapeIndex);
-		}
 }
 
 class TaperedCylinderShape::TCSGetTrianglesContext

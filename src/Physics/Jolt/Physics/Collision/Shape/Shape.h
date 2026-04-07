@@ -319,14 +319,6 @@ public:
 	/// For each shape that collides, ioCollector will receive a hit.
 	virtual void					CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubShapeIDCreator, CollidePointCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const = 0;
 
-	/// Collides all vertices of a soft body with this shape and updates SoftBodyVertex::mCollisionPlane, SoftBodyVertex::mCollidingShapeIndex and SoftBodyVertex::mLargestPenetration if a collision with more penetration was found.
-	/// @param inCenterOfMassTransform Center of mass transform for this shape relative to the vertices.
-	/// @param inScale Scale in local space of the shape (scales relative to its center of mass)
-	/// @param inVertices The vertices of the soft body
-	/// @param inNumVertices The number of vertices in inVertices
-	/// @param inCollidingShapeIndex Value to store in CollideSoftBodyVertexIterator::mCollidingShapeIndex when a collision was found
-	virtual void					CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const = 0;
-
 	/// Collect the leaf transformed shapes of all leaf shapes of this shape.
 	/// inBox is the world space axis aligned box which leaf shapes should collide with.
 	/// inPositionCOM/inRotation/inScale describes the transform of this shape.
@@ -405,6 +397,7 @@ public:
 	/// Class that holds information about the shape that can be used for logging / data collection purposes
 	struct Stats
 	{
+		Stats() = default;
 									Stats(size_t inSizeBytes, uint inNumTriangles) : mSizeBytes(inSizeBytes), mNumTriangles(inNumTriangles) { }
 
 		size_t						mSizeBytes;				///< Amount of memory used by this shape (size in bytes)

@@ -16,7 +16,6 @@ JPH_IMPLEMENT_SERIALIZABLE_NON_VIRTUAL(PhysicsScene)
 {
 	JPH_ADD_ATTRIBUTE(PhysicsScene, mBodies)
 	JPH_ADD_ATTRIBUTE(PhysicsScene, mConstraints)
-	JPH_ADD_ATTRIBUTE(PhysicsScene, mSoftBodies)
 }
 
 JPH_IMPLEMENT_SERIALIZABLE_NON_VIRTUAL(PhysicsScene::ConnectedConstraint)
@@ -34,11 +33,6 @@ void PhysicsScene::AddBody(const BodyCreationSettings &inBody)
 void PhysicsScene::AddConstraint(const TwoBodyConstraintSettings *inConstraint, uint32 inBody1, uint32 inBody2)
 {
 	mConstraints.emplace_back(inConstraint, inBody1, inBody2);
-}
-
-void PhysicsScene::AddSoftBody(const SoftBodyCreationSettings &inSoftBody)
-{
-	mSoftBodies.push_back(inSoftBody);
 }
 
 bool PhysicsScene::FixInvalidScales()
@@ -68,21 +62,12 @@ bool PhysicsScene::CreateBodies(PhysicsSystem *inSystem) const
 	BodyInterface &bi = inSystem->GetBodyInterface();
 
 	BodyIDVector body_ids;
-	body_ids.reserve(mBodies.size() + mSoftBodies.size());
+	body_ids.reserve(mBodies.size());
 
 	// Create bodies
 	for (const BodyCreationSettings &b : mBodies)
 	{
 		const Body *body = bi.CreateBody(b);
-		if (body == nullptr)
-			break;
-		body_ids.push_back(body->GetID());
-	}
-
-	// Create soft bodies
-	for (const SoftBodyCreationSettings &b : mSoftBodies)
-	{
-		const Body *body = bi.CreateSoftBody(b);
 		if (body == nullptr)
 			break;
 		body_ids.push_back(body->GetID());
@@ -94,7 +79,7 @@ bool PhysicsScene::CreateBodies(PhysicsSystem *inSystem) const
 	bi.AddBodiesFinalize(temp_body_ids.data(), (int)temp_body_ids.size(), add_state, EActivation::Activate);
 
 	// If not all bodies are created, creating constraints will be unreliable
-	if (body_ids.size() != mBodies.size() + mSoftBodies.size())
+	if (body_ids.size() != mBodies.size())
 		return false;
 
 	// Create constraints
@@ -115,7 +100,6 @@ void PhysicsScene::SaveBinaryState(StreamOut &inStream, bool inSaveShapes, bool 
 	BodyCreationSettings::ShapeToIDMap shape_to_id;
 	BodyCreationSettings::MaterialToIDMap material_to_id;
 	BodyCreationSettings::GroupFilterToIDMap group_filter_to_id;
-	SoftBodyCreationSettings::SharedSettingsToIDMap settings_to_id;
 
 	// Save bodies
 	inStream.Write((uint32)mBodies.size());
@@ -130,11 +114,6 @@ void PhysicsScene::SaveBinaryState(StreamOut &inStream, bool inSaveShapes, bool 
 		inStream.Write(cc.mBody1);
 		inStream.Write(cc.mBody2);
 	}
-
-	// Save soft bodies
-	inStream.Write((uint32)mSoftBodies.size());
-	for (const SoftBodyCreationSettings &b : mSoftBodies)
-		b.SaveWithChildren(inStream, &settings_to_id, &material_to_id, inSaveGroupFilter? &group_filter_to_id : nullptr);
 }
 
 PhysicsScene::PhysicsSceneResult PhysicsScene::sRestoreFromBinaryState(StreamIn &inStream)
@@ -147,7 +126,6 @@ PhysicsScene::PhysicsSceneResult PhysicsScene::sRestoreFromBinaryState(StreamIn 
 	BodyCreationSettings::IDToShapeMap id_to_shape;
 	BodyCreationSettings::IDToMaterialMap id_to_material;
 	BodyCreationSettings::IDToGroupFilterMap id_to_group_filter;
-	SoftBodyCreationSettings::IDToSharedSettingsMap id_to_settings;
 
 	// Reserve some memory to avoid frequent reallocations
 	id_to_shape.reserve(1024);
@@ -187,22 +165,6 @@ PhysicsScene::PhysicsSceneResult PhysicsScene::sRestoreFromBinaryState(StreamIn 
 		inStream.Read(cc.mBody2);
 	}
 
-	// Read soft bodies
-	len = 0;
-	inStream.Read(len);
-	scene->mSoftBodies.resize(len);
-	for (SoftBodyCreationSettings &b : scene->mSoftBodies)
-	{
-		// Read creation settings
-		SoftBodyCreationSettings::SBCSResult sbcs_result = SoftBodyCreationSettings::sRestoreWithChildren(inStream, id_to_settings, id_to_material, id_to_group_filter);
-		if (sbcs_result.HasError())
-		{
-			result.SetError(sbcs_result.GetError());
-			return result;
-		}
-		b = sbcs_result.Get();
-	}
-
 	result.Set(scene);
 	return result;
 }
@@ -235,8 +197,6 @@ void PhysicsScene::FromPhysicsSystem(const PhysicsSystem *inSystem)
 			// Convert to body creation settings
 			if (body.IsRigidBody())
 				AddBody(body.GetBodyCreationSettings());
-			else
-				AddSoftBody(body.GetSoftBodyCreationSettings());
 		}
 	}
 

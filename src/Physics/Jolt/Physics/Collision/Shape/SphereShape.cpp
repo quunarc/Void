@@ -11,7 +11,6 @@
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/TransformedShape.h>
-#include <Jolt/Physics/Collision/CollideSoftBodyVertexIterator.h>
 #include <Jolt/Geometry/RaySphere.h>
 #include <Jolt/Geometry/Plane.h>
 #include <Jolt/Core/StreamIn.h>
@@ -274,30 +273,6 @@ void SphereShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSubSh
 
 	if (inPoint.LengthSq() <= Square(mRadius))
 		ioCollector.AddHit({ TransformedShape::sGetBodyID(ioCollector.GetContext()), inSubShapeIDCreator.GetID() });
-}
-
-void SphereShape::CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const
-{
-	Vec3 center = inCenterOfMassTransform.GetTranslation();
-	float radius = GetScaledRadius(inScale);
-
-	for (CollideSoftBodyVertexIterator v = inVertices, sbv_end = inVertices + inNumVertices; v != sbv_end; ++v)
-		if (v.GetInvMass() > 0.0f)
-		{
-			// Calculate penetration
-			Vec3 delta = v.GetPosition() - center;
-			float distance = delta.Length();
-			float penetration = radius - distance;
-			if (v.UpdatePenetration(penetration))
-			{
-				// Calculate contact point and normal
-				Vec3 normal = distance > 0.0f? delta / distance : Vec3::sAxisY();
-				Vec3 point = center + radius * normal;
-
-				// Store collision
-				v.SetCollision(Plane::sFromPointAndNormal(point, normal), inCollidingShapeIndex);
-			}
-		}
 }
 
 void SphereShape::GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale) const

@@ -9,7 +9,6 @@
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/ScaleHelpers.h>
 #include <Jolt/Physics/Collision/TransformedShape.h>
-#include <Jolt/Physics/Collision/CollideSoftBodyVertexIterator.h>
 #include <Jolt/Geometry/RayCapsule.h>
 #include <Jolt/ObjectStream/TypeDeclarations.h>
 #include <Jolt/Core/StreamIn.h>
@@ -299,75 +298,6 @@ AABox TaperedCapsuleShape::GetWorldSpaceBounds(Mat44Arg inCenterOfMassTransform,
 	Vec3 p1 = Vec3::sMin(top_center - top_extent, bottom_center - bottom_extent);
 	Vec3 p2 = Vec3::sMax(top_center + top_extent, bottom_center + bottom_extent);
 	return AABox(p1, p2);
-}
-
-void TaperedCapsuleShape::CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const
-{
-	JPH_ASSERT(IsValidScale(inScale));
-
-	Mat44 inverse_transform = inCenterOfMassTransform.InversedRotationTranslation();
-
-	// Get scaled tapered capsule
-	Vec3 abs_scale = inScale.Abs();
-	float scale_y = abs_scale.GetY();
-	float scale_xz = abs_scale.GetX();
-	Vec3 scale_y_flip(1, Sign(inScale.GetY()), 1);
-	Vec3 scaled_top_center(0, scale_y * mTopCenter, 0);
-	Vec3 scaled_bottom_center(0, scale_y * mBottomCenter, 0);
-	float scaled_top_radius = scale_xz * mTopRadius;
-	float scaled_bottom_radius = scale_xz * mBottomRadius;
-
-	for (CollideSoftBodyVertexIterator v = inVertices, sbv_end = inVertices + inNumVertices; v != sbv_end; ++v)
-		if (v.GetInvMass() > 0.0f)
-		{
-			Vec3 local_pos = scale_y_flip * (inverse_transform * v.GetPosition());
-
-			Vec3 position, normal;
-
-			// If the vertex is inside the cone starting at the top center pointing along the y-axis with angle PI/2 - alpha then the closest point is on the top sphere
-			// This corresponds to: Dot(y-axis, (local_pos - top_center) / |local_pos - top_center|) >= cos(PI/2 - alpha)
-			// <=> (local_pos - top_center).y >= sin(alpha) * |local_pos - top_center|
-			Vec3 top_center_to_local_pos = local_pos - scaled_top_center;
-			float top_center_to_local_pos_len = top_center_to_local_pos.Length();
-			if (top_center_to_local_pos.GetY() >= mSinAlpha * top_center_to_local_pos_len)
-			{
-				// Top sphere
-				normal = top_center_to_local_pos_len != 0.0f? top_center_to_local_pos / top_center_to_local_pos_len : Vec3::sAxisY();
-				position = scaled_top_center + scaled_top_radius * normal;
-			}
-			else
-			{
-				// If the vertex is outside the cone starting at the bottom center pointing along the y-axis with angle PI/2 - alpha then the closest point is on the bottom sphere
-				// This corresponds to: Dot(y-axis, (local_pos - bottom_center) / |local_pos - bottom_center|) <= cos(PI/2 - alpha)
-				// <=> (local_pos - bottom_center).y <= sin(alpha) * |local_pos - bottom_center|
-				Vec3 bottom_center_to_local_pos = local_pos - scaled_bottom_center;
-				float bottom_center_to_local_pos_len = bottom_center_to_local_pos.Length();
-				if (bottom_center_to_local_pos.GetY() <= mSinAlpha * bottom_center_to_local_pos_len)
-				{
-					// Bottom sphere
-					normal = bottom_center_to_local_pos_len != 0.0f? bottom_center_to_local_pos / bottom_center_to_local_pos_len : -Vec3::sAxisY();
-				}
-				else
-				{
-					// Tapered cylinder
-					normal = Vec3(local_pos.GetX(), 0, local_pos.GetZ()).NormalizedOr(Vec3::sAxisX());
-					normal.SetY(mTanAlpha);
-					normal = normal.NormalizedOr(Vec3::sAxisX());
-				}
-				position = scaled_bottom_center + scaled_bottom_radius * normal;
-			}
-
-			Plane plane = Plane::sFromPointAndNormal(position, normal);
-			float penetration = -plane.SignedDistance(local_pos);
-			if (v.UpdatePenetration(penetration))
-			{
-				// Need to flip the normal's y if capsule is flipped (this corresponds to flipping both the point and the normal around y)
-				plane.SetNormal(scale_y_flip * plane.GetNormal());
-
-				// Store collision
-				v.SetCollision(plane.GetTransformed(inCenterOfMassTransform), inCollidingShapeIndex);
-			}
-		}
 }
 
 #ifdef JPH_DEBUG_RENDERER

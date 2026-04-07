@@ -12,7 +12,6 @@ JPH_NAMESPACE_BEGIN
 
 // Classes
 class BodyCreationSettings;
-class SoftBodyCreationSettings;
 class BodyActivationListener;
 class StateRecorderFilter;
 struct PhysicsSettings;
@@ -83,9 +82,6 @@ public:
 
 	/// Create a body using creation settings. The returned body will not be part of the body manager yet.
 	Body *							AllocateBody(const BodyCreationSettings &inBodyCreationSettings) const;
-
-	/// Create a soft body using creation settings. The returned body will not be part of the body manager yet.
-	Body *							AllocateSoftBody(const SoftBodyCreationSettings &inSoftBodyCreationSettings) const;
 
 	/// Free a body that has not been added to the body manager yet (if it has, use DestroyBodies).
 	void							FreeBody(Body *inBody) const;

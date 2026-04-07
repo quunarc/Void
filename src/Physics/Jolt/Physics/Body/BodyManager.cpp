@@ -9,9 +9,6 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
-#include <Jolt/Physics/SoftBody/SoftBodyMotionProperties.h>
-#include <Jolt/Physics/SoftBody/SoftBodyCreationSettings.h>
-#include <Jolt/Physics/SoftBody/SoftBodyShape.h>
 #include <Jolt/Physics/StateRecorder.h>
 #include <Jolt/Core/StringTools.h>
 #include <Jolt/Core/QuickSort.h>
@@ -58,33 +55,12 @@ public:
 };
 /// @endcond
 
-/// @cond INTERNAL
-/// Helper class that combines a soft body its motion properties and shape
-class SoftBodyWithMotionPropertiesAndShape : public Body
-{
-public:
-								SoftBodyWithMotionPropertiesAndShape()
-	{
-		mShape.SetEmbedded();
-	}
-
-	SoftBodyMotionProperties	mMotionProperties;
-	SoftBodyShape				mShape;
-};
-/// @endcond
-
 inline void BodyManager::sDeleteBody(Body *inBody)
 {
 	if (inBody->mMotionProperties != nullptr)
 	{
 		JPH_IF_ENABLE_ASSERTS(inBody->mMotionProperties = nullptr;)
-		if (inBody->IsSoftBody())
-		{
-			inBody->mShape = nullptr; // Release the shape to avoid assertion on shape destruction because of embedded object with refcount > 0
-			delete static_cast<SoftBodyWithMotionPropertiesAndShape *>(inBody);
-		}
-		else
-			delete static_cast<BodyWithMotionProperties *>(inBody);
+		delete static_cast<BodyWithMotionProperties *>(inBody);
 	}
 	else
 		delete inBody;
@@ -238,43 +214,6 @@ Body *BodyManager::AllocateBody(const BodyCreationSettings &inBodyCreationSettin
 
 	// Position body
 	body->SetPositionAndRotationInternal(inBodyCreationSettings.mPosition, inBodyCreationSettings.mRotation);
-
-	return body;
-}
-
-/// Create a soft body using creation settings. The returned body will not be part of the body manager yet.
-Body *BodyManager::AllocateSoftBody(const SoftBodyCreationSettings &inSoftBodyCreationSettings) const
-{
-	// Fill in basic properties
-	SoftBodyWithMotionPropertiesAndShape *bmp = new SoftBodyWithMotionPropertiesAndShape;
-	SoftBodyMotionProperties *mp = &bmp->mMotionProperties;
-	SoftBodyShape *shape = &bmp->mShape;
-	Body *body = bmp;
-	shape->mSoftBodyMotionProperties = mp;
-	body->mBodyType = EBodyType::SoftBody;
-	body->mMotionProperties = mp;
-	body->mShape = shape;
-	body->mUserData = inSoftBodyCreationSettings.mUserData;
-	body->SetFriction(inSoftBodyCreationSettings.mFriction);
-	body->SetRestitution(inSoftBodyCreationSettings.mRestitution);
-	body->mMotionType = EMotionType::Dynamic;
-	SetBodyObjectLayerInternal(*body, inSoftBodyCreationSettings.mObjectLayer);
-	body->mObjectLayer = inSoftBodyCreationSettings.mObjectLayer;
-	body->mCollisionGroup = inSoftBodyCreationSettings.mCollisionGroup;
-	mp->SetLinearDamping(inSoftBodyCreationSettings.mLinearDamping);
-	mp->SetAngularDamping(0);
-	mp->SetMaxLinearVelocity(inSoftBodyCreationSettings.mMaxLinearVelocity);
-	mp->SetMaxAngularVelocity(FLT_MAX);
-	mp->SetLinearVelocity(Vec3::sZero());
-	mp->SetAngularVelocity(Vec3::sZero());
-	mp->SetGravityFactor(inSoftBodyCreationSettings.mGravityFactor);
-	mp->mMotionQuality = EMotionQuality::Discrete;
-	mp->mAllowSleeping = inSoftBodyCreationSettings.mAllowSleeping;
-	JPH_IF_ENABLE_ASSERTS(mp->mCachedBodyType = body->mBodyType;)
-	JPH_IF_ENABLE_ASSERTS(mp->mCachedMotionType = body->mMotionType;)
-	mp->Initialize(inSoftBodyCreationSettings);
-
-	body->SetPositionAndRotationInternal(inSoftBodyCreationSettings.mPosition, inSoftBodyCreationSettings.mMakeRotationIdentity? Quat::sIdentity() : inSoftBodyCreationSettings.mRotation);
 
 	return body;
 }
@@ -1087,44 +1026,6 @@ void BodyManager::Draw(const DrawSettings &inDrawSettings, const PhysicsSettings
 					inRenderer->DrawWireSphere(JPH_IF_DOUBLE_PRECISION(body->mMotionProperties->GetSleepTestOffset() +) body->mMotionProperties->mSleepTestSpheres[i].GetCenter(), body->mMotionProperties->mSleepTestSpheres[i].GetRadius(), sleep_color);
 			}
 
-			if (body->IsSoftBody())
-			{
-				const SoftBodyMotionProperties *mp = static_cast<const SoftBodyMotionProperties *>(body->GetMotionProperties());
-				RMat44 com = body->GetCenterOfMassTransform();
-
-				if (inDrawSettings.mDrawSoftBodyVertices)
-					mp->DrawVertices(inRenderer, com);
-
-				if (inDrawSettings.mDrawSoftBodyVertexVelocities)
-					mp->DrawVertexVelocities(inRenderer, com);
-
-				if (inDrawSettings.mDrawSoftBodyEdgeConstraints)
-					mp->DrawEdgeConstraints(inRenderer, com, inDrawSettings.mDrawSoftBodyConstraintColor);
-
-				if (inDrawSettings.mDrawSoftBodyRods)
-					mp->DrawRods(inRenderer, com, inDrawSettings.mDrawSoftBodyConstraintColor);
-
-				if (inDrawSettings.mDrawSoftBodyRodStates)
-					mp->DrawRodStates(inRenderer, com, inDrawSettings.mDrawSoftBodyConstraintColor);
-
-				if (inDrawSettings.mDrawSoftBodyRodBendTwistConstraints)
-					mp->DrawRodBendTwistConstraints(inRenderer, com, inDrawSettings.mDrawSoftBodyConstraintColor);
-
-				if (inDrawSettings.mDrawSoftBodyBendConstraints)
-					mp->DrawBendConstraints(inRenderer, com, inDrawSettings.mDrawSoftBodyConstraintColor);
-
-				if (inDrawSettings.mDrawSoftBodyVolumeConstraints)
-					mp->DrawVolumeConstraints(inRenderer, com, inDrawSettings.mDrawSoftBodyConstraintColor);
-
-				if (inDrawSettings.mDrawSoftBodySkinConstraints)
-					mp->DrawSkinConstraints(inRenderer, com, inDrawSettings.mDrawSoftBodyConstraintColor);
-
-				if (inDrawSettings.mDrawSoftBodyLRAConstraints)
-					mp->DrawLRAConstraints(inRenderer, com, inDrawSettings.mDrawSoftBodyConstraintColor);
-
-				if (inDrawSettings.mDrawSoftBodyPredictedBounds)
-					mp->DrawPredictedBounds(inRenderer, com);
-			}
 		}
 
 	UnlockAllBodies();

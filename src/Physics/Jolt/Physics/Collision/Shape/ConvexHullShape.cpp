@@ -11,7 +11,6 @@
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/TransformedShape.h>
-#include <Jolt/Physics/Collision/CollideSoftBodyVertexIterator.h>
 #include <Jolt/Geometry/ConvexHullBuilder.h>
 #include <Jolt/Geometry/ClosestPoint.h>
 #include <Jolt/ObjectStream/TypeDeclarations.h>
@@ -1055,114 +1054,6 @@ void ConvexHullShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inS
 
 	// Point is inside
 	ioCollector.AddHit({ TransformedShape::sGetBodyID(ioCollector.GetContext()), inSubShapeIDCreator.GetID() });
-}
-
-void ConvexHullShape::CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const
-{
-	Mat44 inverse_transform = inCenterOfMassTransform.InversedRotationTranslation();
-
-	Vec3 inv_scale = inScale.Reciprocal();
-	bool is_not_scaled = ScaleHelpers::IsNotScaled(inScale);
-	float scale_flip = ScaleHelpers::IsInsideOut(inScale)? -1.0f : 1.0f;
-
-	for (CollideSoftBodyVertexIterator v = inVertices, sbv_end = inVertices + inNumVertices; v != sbv_end; ++v)
-		if (v.GetInvMass() > 0.0f)
-		{
-			Vec3 local_pos = inverse_transform * v.GetPosition();
-
-			// Find most facing plane
-			float max_distance = -FLT_MAX;
-			Vec3 max_plane_normal = Vec3::sZero();
-			uint max_plane_idx = 0;
-			if (is_not_scaled)
-			{
-				// Without scale, it is trivial to calculate the distance to the hull
-				for (const Plane &p : mPlanes)
-				{
-					float distance = p.SignedDistance(local_pos);
-					if (distance > max_distance)
-					{
-						max_distance = distance;
-						max_plane_normal = p.GetNormal();
-						max_plane_idx = uint(&p - mPlanes.data());
-					}
-				}
-			}
-			else
-			{
-				// When there's scale we need to calculate the planes first
-				for (uint i = 0; i < (uint)mPlanes.size(); ++i)
-				{
-					// Calculate plane normal and point by scaling the original plane
-					Vec3 plane_normal = (inv_scale * mPlanes[i].GetNormal()).Normalized();
-					Vec3 plane_point = inScale * mPoints[mVertexIdx[mFaces[i].mFirstVertex]].mPosition;
-
-					float distance = plane_normal.Dot(local_pos - plane_point);
-					if (distance > max_distance)
-					{
-						max_distance = distance;
-						max_plane_normal = plane_normal;
-						max_plane_idx = i;
-					}
-				}
-			}
-
-			// Project point onto that plane, in local space to the vertex
-			Vec3 closest_point = -max_distance * max_plane_normal;
-
-			// Check edges if we're outside the hull (when inside we know the closest face is also the closest point to the surface)
-			bool is_outside = max_distance > 0.0f;
-			if (is_outside)
-			{
-				// Loop over edges
-				float closest_point_dist_sq = FLT_MAX;
-				const Face &face = mFaces[max_plane_idx];
-				for (const uint8 *v_start = &mVertexIdx[face.mFirstVertex], *v1 = v_start, *v_end = v_start + face.mNumVertices; v1 < v_end; ++v1)
-				{
-					// Find second point
-					const uint8 *v2 = v1 + 1;
-					if (v2 == v_end)
-						v2 = v_start;
-
-					// Get edge points
-					Vec3 p1 = inScale * mPoints[*v1].mPosition;
-					Vec3 p2 = inScale * mPoints[*v2].mPosition;
-
-					// Check if the position is outside the edge (if not, the face will be closer)
-					Vec3 edge_normal = (p2 - p1).Cross(max_plane_normal);
-					if (scale_flip * edge_normal.Dot(local_pos - p1) > 0.0f)
-					{
-						// Get closest point on edge
-						uint32 set;
-						Vec3 closest = ClosestPoint::GetClosestPointOnLine(p1 - local_pos, p2 - local_pos, set);
-						float distance_sq = closest.LengthSq();
-						if (distance_sq < closest_point_dist_sq)
-						{
-							closest_point_dist_sq = distance_sq;
-							closest_point = closest;
-						}
-					}
-				}
-			}
-
-			// Check if this is the largest penetration
-			Vec3 normal = -closest_point;
-			float normal_length = normal.Length();
-			float penetration = normal_length;
-			if (is_outside)
-				penetration = -penetration;
-			else
-				normal = -normal;
-			if (v.UpdatePenetration(penetration))
-			{
-				// Calculate contact plane
-				normal = normal_length > 1.0e-12f? normal / normal_length : max_plane_normal;
-				Plane plane = Plane::sFromPointAndNormal(local_pos + closest_point, normal);
-
-				// Store collision
-				v.SetCollision(plane.GetTransformed(inCenterOfMassTransform), inCollidingShapeIndex);
-			}
-		}
 }
 
 class ConvexHullShape::CHSGetTrianglesContext

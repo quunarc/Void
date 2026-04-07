@@ -11,7 +11,6 @@
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/TransformedShape.h>
-#include <Jolt/Physics/Collision/CollideSoftBodyVertexIterator.h>
 #include <Jolt/Geometry/RayCylinder.h>
 #include <Jolt/ObjectStream/TypeDeclarations.h>
 #include <Jolt/Core/StreamIn.h>
@@ -312,59 +311,6 @@ void CylinderShape::CollidePoint(Vec3Arg inPoint, const SubShapeIDCreator &inSub
 	if (abs(inPoint.GetY()) <= mHalfHeight											// Within the height
 		&& Square(inPoint.GetX()) + Square(inPoint.GetZ()) <= Square(mRadius))		// Within the radius
 		ioCollector.AddHit({ TransformedShape::sGetBodyID(ioCollector.GetContext()), inSubShapeIDCreator.GetID() });
-}
-
-void CylinderShape::CollideSoftBodyVertices(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const CollideSoftBodyVertexIterator &inVertices, uint inNumVertices, int inCollidingShapeIndex) const
-{
-	JPH_ASSERT(IsValidScale(inScale));
-
-	Mat44 inverse_transform = inCenterOfMassTransform.InversedRotationTranslation();
-
-	// Get scaled cylinder
-	Vec3 abs_scale = inScale.Abs();
-	float half_height = abs_scale.GetY() * mHalfHeight;
-	float radius = abs_scale.GetX() * mRadius;
-
-	for (CollideSoftBodyVertexIterator v = inVertices, sbv_end = inVertices + inNumVertices; v != sbv_end; ++v)
-		if (v.GetInvMass() > 0.0f)
-		{
-			Vec3 local_pos = inverse_transform * v.GetPosition();
-
-			// Calculate penetration into side surface
-			Vec3 side_normal = local_pos;
-			side_normal.SetY(0.0f);
-			float side_normal_length = side_normal.Length();
-			float side_penetration = radius - side_normal_length;
-
-			// Calculate penetration into top or bottom plane
-			float top_penetration = half_height - abs(local_pos.GetY());
-
-			Vec3 point, normal;
-			if (side_penetration < 0.0f && top_penetration < 0.0f)
-			{
-				// We're outside the cylinder height and radius
-				point = side_normal * (radius / side_normal_length) + Vec3(0, half_height * Sign(local_pos.GetY()), 0);
-				normal = (local_pos - point).NormalizedOr(Vec3::sAxisY());
-			}
-			else if (side_penetration < top_penetration)
-			{
-				// Side surface is closest
-				normal = side_normal_length > 0.0f? side_normal / side_normal_length : Vec3::sAxisX();
-				point = radius * normal;
-			}
-			else
-			{
-				// Top or bottom plane is closest
-				normal = Vec3(0, Sign(local_pos.GetY()), 0);
-				point = half_height * normal;
-			}
-
-			// Calculate penetration
-			Plane plane = Plane::sFromPointAndNormal(point, normal);
-			float penetration = -plane.SignedDistance(local_pos);
-			if (v.UpdatePenetration(penetration))
-				v.SetCollision(plane.GetTransformed(inCenterOfMassTransform), inCollidingShapeIndex);
-		}
 }
 
 void CylinderShape::GetTrianglesStart(GetTrianglesContext &ioContext, const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale) const

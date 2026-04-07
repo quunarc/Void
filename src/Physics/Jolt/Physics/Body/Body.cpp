@@ -6,8 +6,6 @@
 
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
-#include <Jolt/Physics/SoftBody/SoftBodyCreationSettings.h>
-#include <Jolt/Physics/SoftBody/SoftBodyMotionProperties.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/StateRecorder.h>
 #include <Jolt/Physics/Collision/Shape/EmptyShape.h>
@@ -301,10 +299,7 @@ void Body::SaveState(StateRecorder &inStream) const
 
 	if (mMotionProperties != nullptr)
 	{
-		if (IsSoftBody())
-			static_cast<const SoftBodyMotionProperties *>(mMotionProperties)->SaveState(inStream);
-		else
-			mMotionProperties->SaveState(inStream);
+		mMotionProperties->SaveState(inStream);
 	}
 }
 
@@ -315,10 +310,7 @@ void Body::RestoreState(StateRecorder &inStream)
 
 	if (mMotionProperties != nullptr)
 	{
-		if (IsSoftBody())
-			static_cast<SoftBodyMotionProperties *>(mMotionProperties)->RestoreState(inStream);
-		else
-			mMotionProperties->RestoreState(inStream);
+		mMotionProperties->RestoreState(inStream);
 
 		JPH_IF_ENABLE_ASSERTS(mMotionProperties->mCachedMotionType = mMotionType);
 	}
@@ -391,34 +383,6 @@ BodyCreationSettings Body::GetBodyCreationSettings() const
 	}
 
 	result.SetShape(GetShape());
-
-	return result;
-}
-
-SoftBodyCreationSettings Body::GetSoftBodyCreationSettings() const
-{
-	JPH_ASSERT(IsSoftBody());
-
-	SoftBodyCreationSettings result;
-
-	result.mPosition = GetPosition();
-	result.mRotation = GetRotation();
-	result.mUserData = mUserData;
-	result.mObjectLayer = GetObjectLayer();
-	result.mCollisionGroup = GetCollisionGroup();
-	result.mFriction = GetFriction();
-	result.mRestitution = GetRestitution();
-	const SoftBodyMotionProperties *mp = static_cast<const SoftBodyMotionProperties *>(mMotionProperties);
-	result.mNumIterations = mp->GetNumIterations();
-	result.mLinearDamping = mp->GetLinearDamping();
-	result.mMaxLinearVelocity = mp->GetMaxLinearVelocity();
-	result.mGravityFactor = mp->GetGravityFactor();
-	result.mPressure = mp->GetPressure();
-	result.mUpdatePosition = mp->GetUpdatePosition();
-	result.mVertexRadius = mp->GetVertexRadius();
-	result.mAllowSleeping = mp->GetAllowSleeping();
-	result.mFacesDoubleSided = mp->GetFacesDoubleSided();
-	result.mSettings = mp->GetSettings();
 
 	return result;
 }

@@ -16,7 +16,6 @@ JPH_NAMESPACE_BEGIN
 
 class Body;
 class BodyCreationSettings;
-class SoftBodyCreationSettings;
 class BodyLockInterface;
 class BroadPhase;
 class BodyManager;
@@ -42,25 +41,15 @@ public:
 	/// @return Created body or null when out of bodies
 	Body *						CreateBody(const BodyCreationSettings &inSettings);
 
-	/// Create a soft body
-	/// @return Created body or null when out of bodies
-	Body *						CreateSoftBody(const SoftBodyCreationSettings &inSettings);
-
 	/// Create a rigid body with specified ID. This function can be used if a simulation is to run in sync between clients or if a simulation needs to be restored exactly.
 	/// The ID created on the server can be replicated to the client and used to create a deterministic simulation.
 	/// @return Created body or null when the body ID is invalid or a body of the same ID already exists.
 	Body *						CreateBodyWithID(const BodyID &inBodyID, const BodyCreationSettings &inSettings);
 
-	/// Create a soft body with specified ID. See comments at CreateBodyWithID.
-	Body *						CreateSoftBodyWithID(const BodyID &inBodyID, const SoftBodyCreationSettings &inSettings);
-
 	/// Advanced use only. Creates a rigid body without specifying an ID. This body cannot be added to the physics system until it has been assigned a body ID.
 	/// This can be used to decouple allocation from registering the body. A call to CreateBodyWithoutID followed by AssignBodyID is equivalent to calling CreateBodyWithID.
 	/// @return Created body
 	Body *						CreateBodyWithoutID(const BodyCreationSettings &inSettings) const;
-
-	/// Advanced use only. Creates a body without specifying an ID. See comments at CreateBodyWithoutID.
-	Body *						CreateSoftBodyWithoutID(const SoftBodyCreationSettings &inSettings) const;
 
 	/// Advanced use only. Destroy a body previously created with CreateBodyWithoutID that hasn't gotten an ID yet through the AssignBodyID function,
 	/// or a body that has had its body ID unassigned through UnassignBodyIDs. Bodies that have an ID should be destroyed through DestroyBody.
@@ -107,10 +96,6 @@ public:
 	/// Combines CreateBody and AddBody
 	/// @return Created body ID or an invalid ID when out of bodies
 	BodyID						CreateAndAddBody(const BodyCreationSettings &inSettings, EActivation inActivationMode);
-
-	/// Combines CreateSoftBody and AddBody
-	/// @return Created body ID or an invalid ID when out of bodies
-	BodyID						CreateAndAddSoftBody(const SoftBodyCreationSettings &inSettings, EActivation inActivationMode);
 
 	/// Add state handle, used to keep track of a batch of bodies while adding them to the PhysicsSystem.
 	using AddState = void *;
