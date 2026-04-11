@@ -36,13 +36,23 @@ class JPH_EXPORT TempAllocatorImpl final : public TempAllocator
 public:
 	JPH_OVERRIDE_NEW_DELETE
 
+	TempAllocatorImpl() = default;
+
 	/// Constructs the allocator with a maximum allocatable size of inSize
 	explicit						TempAllocatorImpl(size_t inSize) : mSize(inSize)
 	{
 		if constexpr (needs_aligned_allocate)
-			mBase = static_cast<uint8 *>(AlignedAllocate(inSize, JPH_RVECTOR_ALIGNMENT));
+			mBase = static_cast<uint8*>(AlignedAllocate(inSize, JPH_RVECTOR_ALIGNMENT));
 		else
-			mBase = static_cast<uint8 *>(JPH::Allocate(inSize));
+			mBase = static_cast<uint8*>(JPH::Allocate(inSize));
+	}
+
+	void Init(size_t inSize) 
+	{
+		if constexpr (needs_aligned_allocate)
+			mBase = static_cast<uint8*>(AlignedAllocate(inSize, JPH_RVECTOR_ALIGNMENT));
+		else
+			mBase = static_cast<uint8*>(JPH::Allocate(inSize));
 	}
 
 	/// Destructor, frees the block

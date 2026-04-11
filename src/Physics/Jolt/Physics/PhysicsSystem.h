@@ -109,6 +109,8 @@ public:
 	/// Access to the body interface. This interface allows to to create / remove bodies and to change their properties.
 	const BodyInterface &		GetBodyInterface() const									{ return mBodyInterfaceLocking; }
 	BodyInterface &				GetBodyInterface()											{ return mBodyInterfaceLocking; }
+	const BodyInterface*		GetBodyInterfacePointer() const								{ return &mBodyInterfaceLocking; }
+	BodyInterface*				GetBodyInterfacePointer()									{ return &mBodyInterfaceLocking; }
 	const BodyInterface &		GetBodyInterfaceNoLock() const								{ return mBodyInterfaceNoLock; } ///< Version that does not lock the bodies, use with great care!
 	BodyInterface &				GetBodyInterfaceNoLock()									{ return mBodyInterfaceNoLock; } ///< Version that does not lock the bodies, use with great care!
 

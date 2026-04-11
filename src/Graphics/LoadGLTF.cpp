@@ -37,8 +37,6 @@ struct Transform
     }
 };
 
-//static char nameBuffer[12];
-
 void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout)
 {
     HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;

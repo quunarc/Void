@@ -88,8 +88,8 @@ namespace
         meshData.textures[2] = meshDraw.normalTextureIndex;
         meshData.textures[3] = meshDraw.occlusionTextureIndex;
 
-        meshData.emissiveFactor = 
-        { 
+        meshData.emissiveFactor =
+        {
             meshDraw.emissiveFactor.x,
             meshDraw.emissiveFactor.y,
             meshDraw.emissiveFactor.z
@@ -149,14 +149,19 @@ namespace
         skyboxImageArray.shutdown();
         return newTexture;
     }
+
+    inline mat4s& convertToMat4(JPH::RMat44& jphMat) { return *reinterpret_cast<mat4s*>(&jphMat); }
+    inline vec3s& convertToVec3(JPH::Vec3& jphVec3) { return *reinterpret_cast<vec3s*>(&jphVec3); }
 }
 
-struct Entity 
+struct Entity
 {
     //If we do this we can have a gaint bindless positionally buffer that has everything in it we just index into the that position array.
     uint32_t positionIndex;
     //We can loop through all the entities and use that model index to fetch the meshDraw to be able to draw all the models regardless of the model.
     uint32_t modelIndex;
+
+    JPH::BodyID bodyID;
 };
 
 int main(int argc, char** argv)
@@ -195,7 +200,7 @@ int main(int argc, char** argv)
     imgui->init(&imguiConfig);
 
     Physics physics;
-    //physics.initPhysics();
+    physics.initPhysics();
 
     //Window::instance()->setFullscreen(true);
 
@@ -303,7 +308,7 @@ int main(int argc, char** argv)
     models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, sceneBuffer, mainDescriptorSetLayout);
 
     float sceneRadius = 5000.f;
-    for (uint32_t i = 0; i < totalDucks; ++i)
+    for (uint32_t i = 2; i < totalDucks; ++i)
     {
         vec3s postion{};
 
@@ -323,15 +328,69 @@ int main(int argc, char** argv)
         drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
 
         entities[i].positionIndex = i;
-        if (i % 2 == 0)
-        {
-            entities[i].modelIndex = rockModelIndex;
-        }
-        else 
-        {
-            entities[i].modelIndex = duckModelIndex;
-        }
+        entities[i].modelIndex = rockModelIndex;
     }
+
+    vec3s postion{};
+
+    postion.x = 0.f;
+    postion.y = 0.f;
+    postion.z = 0.f;
+
+    float rotx = 0.f;
+    float roty = 0.f;
+    float rotz = 0.f;
+
+    vec3s axis = glms_normalize({ rotx, roty, rotz });
+    float angle = 0.f;
+
+    vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
+
+    drawMatrices[0] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    entities[0].positionIndex = 0;
+    entities[0].modelIndex = rockModelIndex;
+
+    postion.x = 5999.f;
+    postion.y = 0.f;
+    postion.z = 0.f;
+
+    rotx = 0.f;
+    roty = 0.f;
+    rotz = 0.f;
+
+    axis = glms_normalize({ rotx, roty, rotz });
+    angle = 0.f;
+
+    scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
+
+    drawMatrices[1] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    entities[1].positionIndex = 1;
+    entities[1].modelIndex = duckModelIndex;
+
+    // Create the shape
+    JPH::SphereShape sphereShape{ 850.f };
+    JPH::RVec3Arg position{ 0.f, 0.f, 0.f };
+    //Note that this uses the shorthand version of creating and adding a body to the world
+    JPH::BodyCreationSettings sphereSettings{ &sphereShape, position, JPH::Quat::sIdentity(), JPH::EMotionType::Static, Layers::MOVING };
+    entities[0].bodyID = physics.bodyInterface->CreateAndAddBody(sphereSettings, JPH::EActivation::Activate);
+
+    // Create the shape
+    JPH::SphereShape sphereShape1{ 50.f };
+    JPH::RVec3Arg position1{ 5999.f, 0.f, 0.f };
+    // Note that this uses the shorthand version of creating and adding a body to the world
+    JPH::BodyCreationSettings sphereSettings1{ &sphereShape1, position1, JPH::Quat::sIdentity(), JPH::EMotionType::Dynamic, Layers::MOVING };
+    sphereSettings1.mLinearVelocity = { 0.f, 0.0f, 0.f };
+    entities[1].bodyID = physics.bodyInterface->CreateAndAddBody(sphereSettings1, JPH::EActivation::Activate);
+
+    // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
+    // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
+    physics.bodyInterface->SetLinearVelocity(entities[1].bodyID, JPH::Vec3(-400.f, 0.0f, 0.0f));
+
+
+    // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
+    // You should definitely not call this every frame or when e.g. streaming in a new level section as it is an expensive operation.
+    // Instead insert all new objects in batches instead of 1 at a time to keep the broad phase efficient.
+    physics.physicsSystem.OptimizeBroadPhase();
 
     PushConstants pushConstants{};
 
@@ -387,8 +446,6 @@ int main(int argc, char** argv)
     mat4s* positionBufferData = reinterpret_cast<mat4s*>(gpu.mapBuffer(positionMap));
 
     vec3s newPosition{ 0 };
-
-    physics.updatePhysics();
 
     while (Window::instance()->exitRequested == false)
     {
@@ -453,6 +510,8 @@ int main(int argc, char** argv)
             float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
             beginFrameTick = currentTick;
 
+            physics.updatePhysics();
+            
             inputHandler.newFrame();
             inputHandler.update();
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
@@ -526,14 +585,18 @@ int main(int argc, char** argv)
                 memcpy(cbData, &uniformData, sizeof(UniformData));
             }
 
-            newPosition.z += deltaTime;
+            //newPosition.z += deltaTime;
             Buffer* positionBuf = gpu.accessBuffer(positionalBuffer);
 
             for (uint32_t i = 0; i < positionalMatrixSize; ++i)
             {
-                positionBufferData[i] = glms_translate(positionBufferData[i], newPosition);
+                if (i == 1)
+                {
+                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(entities[i].bodyID);
+                    positionBufferData[i] = convertToMat4(newPos);
+                }
             }
-           
+
             pushConstants.modelPositionAddress = positionBuf->bufferAddress;
             for (uint32_t entityIndex = 0; entityIndex < entities.size; ++entityIndex)
             {
@@ -580,8 +643,6 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    //physics.shutdownPhysics();
-
     gpu.unmapBuffer(cbMap);
     gpu.unmapBuffer(skyboxMaterialMap);
     gpu.unmapBuffer(skyboxCBMap);
@@ -598,6 +659,13 @@ int main(int argc, char** argv)
         models[i].shutdownModel(gpu);
     }
     models.shutdown();
+
+    for (uint32_t i = 0; i < entities.size; ++i)
+    {
+        physics.bodyInterface->RemoveBody(entities[i].bodyID);
+        physics.bodyInterface->DestroyBody(entities[i].bodyID);
+    }
+
     entities.shutdown();
 
     gpu.destroySampler(skyboxSampler);

@@ -232,7 +232,6 @@ public:
 		return inStream;
 	}
 
-private:
 	Vec4						mCol[4];												///< Column
 };
 

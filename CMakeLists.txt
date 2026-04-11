@@ -55,6 +55,7 @@ set(VOID_SOURCE src/main.cpp
 
                 src/Physics/Physics.hpp
                 src/Physics/Physics.cpp
+				src/Physics/CollisionGeometry.h
 
                 src/Graphics/VoidImgui.hpp
                 src/Graphics/VoidImgui.cpp
@@ -639,14 +640,6 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Physics/StateRecorderImpl.h
 	${JOLT_PHYSICS_ROOT}/RegisterTypes.cpp
 	${JOLT_PHYSICS_ROOT}/RegisterTypes.h
-	${JOLT_PHYSICS_ROOT}/Renderer/DebugRenderer.cpp
-	${JOLT_PHYSICS_ROOT}/Renderer/DebugRenderer.h
-	${JOLT_PHYSICS_ROOT}/Renderer/DebugRendererPlayback.cpp
-	${JOLT_PHYSICS_ROOT}/Renderer/DebugRendererPlayback.h
-	${JOLT_PHYSICS_ROOT}/Renderer/DebugRendererRecorder.cpp
-	${JOLT_PHYSICS_ROOT}/Renderer/DebugRendererRecorder.h
-	${JOLT_PHYSICS_ROOT}/Renderer/DebugRendererSimple.cpp
-	${JOLT_PHYSICS_ROOT}/Renderer/DebugRendererSimple.h
 	${JOLT_PHYSICS_ROOT}/Skeleton/SkeletalAnimation.cpp
 	${JOLT_PHYSICS_ROOT}/Skeleton/SkeletalAnimation.h
 	${JOLT_PHYSICS_ROOT}/Skeleton/Skeleton.cpp
@@ -714,11 +707,11 @@ add_library(Jolt::Jolt ALIAS Jolt)
 
 target_compile_definitions(Jolt PUBLIC JPH_USE_VK)
 
-target_include_directories(Jolt PUBLIC ${Vulkan_INCLUDE_DIRS} ${JOLT_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR} ${ENGINE_INCLUDE})
+target_include_directories(Jolt PUBLIC ${Vulkan_INCLUDE_DIRS} ${JOLT_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR} ${ENGINE_INCLUDE} ${JOLT_RENDERER_INCLUDE} ${JOLT_BASE_RENDERER_INCLUDE})
 target_link_libraries(Jolt LINK_PUBLIC ${Vulkan_LIBRARIES})
 
 target_compile_definitions(Jolt PUBLIC JPH_USE_CPU_COMPUTE)
-target_compile_definitions(Jolt PUBLIC "JPH_DEBUG_RENDERER")
+#target_compile_definitions(Jolt PUBLIC "JPH_DEBUG_RENDERER")
 set(JOLT_PROFILE_DEFINE JPH_PROFILE_ENABLED)
 
 # Emit the instruction set definitions to ensure that child projects use the same settings even if they override the used instruction sets (a mismatch causes link errors)
