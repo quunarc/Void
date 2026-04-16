@@ -7,8 +7,6 @@
 
 layout(scalar, set = 0, binding = 0) uniform LocalConstants
 {
-    mat4 cameraModel;
-    mat4 viewPerspective;
     vec4 eye;
     vec4 light;
 };

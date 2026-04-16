@@ -23,7 +23,8 @@ struct ModelPosition
     mat4 model;
     mat4 viewPerspective;
     //Colour will be used as a key for various different objects.
-    vec3 colour;
+    vec4 colour;
+    float pad[12];
 };
 
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer VertexData
@@ -44,7 +45,7 @@ layout(scalar, push_constant) uniform entityIndex
 };
 
 //Pipeline layout needs changing over the default one.
-layout(location = 0) out vec3 vColour;
+layout(location = 0) out vec4 vColour;
 
 void main()
 {

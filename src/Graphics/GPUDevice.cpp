@@ -1411,7 +1411,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
     return handle;
 }
 
-PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
+PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation, bool debugRendering)
 {
     PipelineHandle handle = { pipelines.obtainResource() };
     if (handle.index == INVALID_INDEX)
@@ -1542,7 +1542,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.topology = debugRendering == false ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
         pipelineInfo.pInputAssemblyState = &inputAssembly;

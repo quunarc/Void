@@ -18,6 +18,11 @@ struct Vertices
     uint16_t texCoord0[2];
 };
 
+struct ColliderVertices
+{
+    float position[3];
+};
+
 struct MeshDraw
 {
     mat4s model;
@@ -72,6 +77,7 @@ struct Model
     Array<MeshDraw> meshDraws;
 
     void loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
+    void loadCollider(const char* modelPath, GPUDevice& gpu);
     void shutdownModel(GPUDevice& gpu);
 
     Array<Vertices> vertices;

@@ -51,6 +51,7 @@ namespace
     //TODO: Figure out if you need this stuff.
     PipelineHandle cubePipeline;
     PipelineHandle skyboxPipeline;
+    PipelineHandle debugPipeline;
     BufferHandle sceneBuffer;
     BufferHandle skyboxUniformBuffer;
     BufferHandle skyboxMaterialBuffer;
@@ -59,6 +60,7 @@ namespace
     DescriptorSetHandle skyboxDescriptorSet;
 
     BufferHandle positionalBuffer;
+    BufferHandle debugDataBuffer;
 
     struct SkyboxData
     {
@@ -72,6 +74,22 @@ namespace
         mat4s viewPerspective;
         vec4s eye;
         vec4s light;
+    };
+
+    //Here we are going to attempt full bindless for the debug renderer to make this as painless as possible in the future.
+    struct DebugData
+    {
+        mat4s pos;
+        //We also need the global scale to be the same as the regular geometry other wise things will be too small.
+        mat4s globalModel;
+        //We need this because the final matrix that comes out the glb after multiplying 
+        //all local nodes together needs to be the same as the collision geometry.
+        //Meaning that model matrix we get out of the actual geometry needs to be given to the debug geometry if they tied together when creating the buffer.
+        mat4s model;
+        mat4s viewPerspective;
+        //Colour will be used as a key for various different objects.
+        vec4s colour;
+        float pad[12];
     };
 
     struct EntityData
@@ -271,6 +289,21 @@ int main(int argc, char** argv)
 
     skyboxPipeline = gpu.createPipeline(pipelineCreation2);
 
+    //Debug renderer
+    PipelineCreation debugPipelineCreation{};
+    debugPipelineCreation.depthStencil.depthEnable = false;
+
+    //Shader state
+    FileReadResult vertDebug = fileReadBinary("Assets/Shaders/debugRendering.vert.spv", &MemoryService::instance()->scratchAllocator);
+    FileReadResult fragDebug = fileReadBinary("Assets/Shaders/debugRendering.frag.spv", &MemoryService::instance()->scratchAllocator);
+
+    debugPipelineCreation.shaders.setName("debugRenderer")
+        .addStage(vertDebug.data, uint32_t(vertDebug.size), VK_SHADER_STAGE_VERTEX_BIT)
+        .addStage(fragDebug.data, uint32_t(fragDebug.size), VK_SHADER_STAGE_FRAGMENT_BIT)
+        .setSPVInput(true);
+
+    debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ false);
+
     //Constant buffer
     BufferCreation uniformBufferCreation;
     uniformBufferCreation.reset()
@@ -302,17 +335,23 @@ int main(int argc, char** argv)
     srand(42);
 
     uint32_t totalDucks = 1111;
-    Array<EntityData> drawMatrices;
-    drawMatrices.init(allocator, totalDucks, totalDucks);
+    Array<EntityData> entityData;
+    entityData.init(allocator, totalDucks, totalDucks);
+
+    uint32_t totalColliders = 2;
+    Array<DebugData> debugData;
+    debugData.init(allocator, totalColliders, totalColliders);
 
     Array<Entity> entities;
     entities.init(allocator, totalDucks, totalDucks);
     constexpr uint32_t rockModelIndex = 0;
     constexpr uint32_t duckModelIndex = 1;
+    constexpr uint32_t debugSphereIndex = 2;
     Array<Model> models;
-    models.init(allocator, 2, 2);
+    models.init(allocator, 3, 3);
     models[rockModelIndex].loadModel(DEFAULT_3D_MODEL, gpu, sceneBuffer, mainDescriptorSetLayout);
     models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, sceneBuffer, mainDescriptorSetLayout);
+    models[debugSphereIndex].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
 
     float sceneRadius = 5000.f;
     for (uint32_t i = 2; i < totalDucks; ++i)
@@ -332,8 +371,8 @@ int main(int argc, char** argv)
 
         vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
-        drawMatrices[i].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
-        drawMatrices[i].colour = { rotx, roty, rotz, 1.f };
+        entityData[i].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+        entityData[i].colour = { rotx, roty, rotz, 1.f };
 
         entities[i].positionIndex = i;
         entities[i].modelIndex = rockModelIndex;
@@ -354,8 +393,8 @@ int main(int argc, char** argv)
 
     vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
-    drawMatrices[0].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
-    drawMatrices[0].colour = { 1.f, 0.f, 1.f, 1.f };
+    entityData[0].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    entityData[0].colour = { 1.f, 0.f, 1.f, 1.f };
     entities[0].positionIndex = 0;
     entities[0].modelIndex = rockModelIndex;
 
@@ -372,8 +411,8 @@ int main(int argc, char** argv)
 
     scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
-    drawMatrices[1].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
-    drawMatrices[1].colour = { 0.f, 1.f, 1.f, 1.f };
+    entityData[1].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    entityData[1].colour = { 0.f, 1.f, 1.f, 1.f };
     entities[1].positionIndex = 1;
     entities[1].modelIndex = duckModelIndex;
 
@@ -389,13 +428,24 @@ int main(int argc, char** argv)
     JPH::RVec3Arg position1{ 5999.f, 0.f, 0.f };
     // Note that this uses the shorthand version of creating and adding a body to the world
     JPH::BodyCreationSettings sphereSettings1{ &sphereShape1, position1, JPH::Quat::sIdentity(), JPH::EMotionType::Dynamic, Layers::MOVING };
-    sphereSettings1.mLinearVelocity = { 0.f, 0.0f, 0.f };
+    sphereSettings1.mLinearVelocity = { 0.f, 0.f, 0.f };
     entities[1].bodyID = physics.bodyInterface->CreateAndAddBody(sphereSettings1, JPH::EActivation::Activate);
 
     // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
     // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
     physics.bodyInterface->SetLinearVelocity(entities[1].bodyID, JPH::Vec3(-400.f, 0.0f, 0.0f));
 
+    debugData[0].colour = { 1.f, 0.f, 1.f, 1.f};
+    debugData[0].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make({ 0.f, 0.f, 0.f }));
+    debugData[0].model = glms_mat4_identity();
+    debugData[0].viewPerspective = glms_mat4_identity();
+    debugData[0].globalModel = glms_mat4_identity();
+
+    debugData[1].colour = { 1.f, 0.f, 1.f, 1.f };
+    debugData[1].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make({ 10.f, 0.f, 0.f }));
+    debugData[1].model = glms_mat4_identity();
+    debugData[1].viewPerspective = glms_mat4_identity();
+    debugData[1].globalModel = glms_mat4_identity();
 
     // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
     // You should definitely not call this every frame or when e.g. streaming in a new level section as it is an expensive operation.
@@ -406,14 +456,20 @@ int main(int argc, char** argv)
 
     BufferCreation bufferCreation{};
     bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * drawMatrices.size)
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * entityData.size)
         .setName("othername")
-        .setData(drawMatrices.data);
+        .setData(entityData.data);
     positionalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
-    uint32_t positionalMatrixSize = drawMatrices.size;
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugData) * totalColliders)
+        .setName("debugRenderer")
+        .setData(debugData.data);
+    debugDataBuffer = gpu.createBindlessBuffer(bufferCreation);
 
-    drawMatrices.shutdown();
+    uint32_t positionalMatrixSize = entityData.size;
+
+    entityData.shutdown();
 
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SkyboxData))
@@ -437,7 +493,7 @@ int main(int argc, char** argv)
     vec3s eye = vec3s{ 0.f, 2.5f, 2.f };
 
     GameCamera gameCamera;
-    gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
+    gameCamera.internal3DCamera.initPerspective(0.01f, 5000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
     gameCamera.init(7.f, 3.0f, 0.1f);
 
     float modelScale = 0.1f;
@@ -454,6 +510,9 @@ int main(int argc, char** argv)
 
     MapBufferParameters positionMap = { .buffer = positionalBuffer, .offset = 0, .size = 0 };
     EntityData* positionBufferData = reinterpret_cast<EntityData*>(gpu.mapBuffer(positionMap));
+
+    MapBufferParameters debugDataMap = { .buffer = debugDataBuffer, .offset = 0, .size = 0 };
+    DebugData* debugDataGPU = reinterpret_cast<DebugData*>(gpu.mapBuffer(debugDataMap));
 
     vec3s newPosition{ 0 };
 
@@ -587,8 +646,6 @@ int main(int argc, char** argv)
                 UniformData uniformData{};
                 uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
                 uniformData.globalModel = globalModel;
-                //eye not used in shader.
-
                 uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
                 uniformData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
