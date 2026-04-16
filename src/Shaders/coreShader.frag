@@ -45,6 +45,7 @@ layout(location = 0) in vec2 vTexcoord0;
 layout(location = 1) in vec3 vNormal;
 layout(location = 2) in vec4 vTangent;
 layout(location = 3) in vec4 vPosition;
+layout(location = 4) in vec4 vColour;
 
 layout(location = 0) out vec4 fragColour;
 
@@ -128,6 +129,7 @@ float heaviside(float value)
 void main()
 {
     fragColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
+    fragColour *= vColour;
 
 //    mat3 TBN = mat3(1.0);
 //    vec4 baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;

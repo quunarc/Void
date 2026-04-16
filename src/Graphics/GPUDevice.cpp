@@ -75,7 +75,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 #endif // _WIN32
 
 #if defined(_MSC_VER)
-        __debugbreak();
+        if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        {
+            __debugbreak();
+        }
 #elif defined(__LINUX__)
         std::raise(SIGINT);
 #endif
@@ -671,7 +674,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     applicationInfo.pApplicationName = "Void Game";
     applicationInfo.applicationVersion = 1;
     applicationInfo.pEngineName = "Void Engine";
-    applicationInfo.apiVersion = VK_MAKE_VERSION(1, 3, 0);
+    applicationInfo.apiVersion = VK_MAKE_VERSION(1, 4, 0);
 
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -1460,7 +1463,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
     VkPushConstantRange range{};
     range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     range.offset = 0;
-    range.size = 24;
+    range.size = 128;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

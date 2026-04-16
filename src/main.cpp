@@ -74,10 +74,17 @@ namespace
         vec4s light;
     };
 
+    struct EntityData
+    {
+        mat4s pos;
+        vec4s colour;
+        float padd[12];
+    };
+
     struct PushConstants
     {
-        VkDeviceAddress modelPositionAddress;
         VkDeviceAddress vertexDataAddress;
+        VkDeviceAddress modelPositionAddress;
         uint32_t index;
     };
 
@@ -295,7 +302,7 @@ int main(int argc, char** argv)
     srand(42);
 
     uint32_t totalDucks = 1111;
-    Array<mat4s> drawMatrices;
+    Array<EntityData> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
 
     Array<Entity> entities;
@@ -325,7 +332,8 @@ int main(int argc, char** argv)
 
         vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
-        drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+        drawMatrices[i].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+        drawMatrices[i].colour = { rotx, roty, rotz, 1.f };
 
         entities[i].positionIndex = i;
         entities[i].modelIndex = rockModelIndex;
@@ -346,7 +354,8 @@ int main(int argc, char** argv)
 
     vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
-    drawMatrices[0] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    drawMatrices[0].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    drawMatrices[0].colour = { 1.f, 0.f, 1.f, 1.f };
     entities[0].positionIndex = 0;
     entities[0].modelIndex = rockModelIndex;
 
@@ -363,7 +372,8 @@ int main(int argc, char** argv)
 
     scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
-    drawMatrices[1] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    drawMatrices[1].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    drawMatrices[1].colour = { 0.f, 1.f, 1.f, 1.f };
     entities[1].positionIndex = 1;
     entities[1].modelIndex = duckModelIndex;
 
@@ -396,7 +406,7 @@ int main(int argc, char** argv)
 
     BufferCreation bufferCreation{};
     bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(mat4s) * drawMatrices.size)
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * drawMatrices.size)
         .setName("othername")
         .setData(drawMatrices.data);
     positionalBuffer = gpu.createBindlessBuffer(bufferCreation);
@@ -443,7 +453,7 @@ int main(int argc, char** argv)
     SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
 
     MapBufferParameters positionMap = { .buffer = positionalBuffer, .offset = 0, .size = 0 };
-    mat4s* positionBufferData = reinterpret_cast<mat4s*>(gpu.mapBuffer(positionMap));
+    EntityData* positionBufferData = reinterpret_cast<EntityData*>(gpu.mapBuffer(positionMap));
 
     vec3s newPosition{ 0 };
 
@@ -593,7 +603,7 @@ int main(int argc, char** argv)
                 if (i == 1)
                 {
                     JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(entities[i].bodyID);
-                    positionBufferData[i] = convertToMat4(newPos);
+                    positionBufferData[i].pos = convertToMat4(newPos);
                 }
             }
 
@@ -601,7 +611,7 @@ int main(int argc, char** argv)
             for (uint32_t entityIndex = 0; entityIndex < entities.size; ++entityIndex)
             {
                 const Entity& entity = entities[entityIndex];
-                pushConstants.index = entity.positionIndex;
+                pushConstants.index = entityIndex;
                 for (uint32_t meshIndex = 0; meshIndex < models[entity.modelIndex].meshDraws.size; ++meshIndex)
                 {
                     MeshDraw meshDraw = models[entity.modelIndex].meshDraws[meshIndex];

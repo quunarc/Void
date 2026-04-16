@@ -41,6 +41,8 @@ endif()
 file(GLOB_RECURSE GLSL_SOURCE_FILES "src/Shaders/*.vert" "src/Shaders/*.frag" "src/Shaders/*.comp" "src/Shaders/*.mesh" "src/Shaders/*.task")
 file(GLOB_RECURSE GLSL_HEADER_FILES "src/Shaders/*.h")
 
+#set(SLANG_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/Shaders/coreShader1.slang)
+
 ###Void
 
 set(VOID_SOURCE src/main.cpp
@@ -831,7 +833,7 @@ endif()
 
 file(COPY ${THINGS_TO_COPY} DESTINATION ${CMAKE_BINARY_DIR})
 
-#NOTE At release this needs to be updated to look for glslangValidator at a particular location.
+#NOTE At release this needs to be updated to look for glslang at a particular location.
 if(UNIX)
     set(GLSL_VALIDATOR "glslangValidator")
 elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
@@ -847,11 +849,34 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
     add_custom_command(
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SPIRV_OUTPUT_DIR}"
-        COMMAND ${GLSL_VALIDATOR} --target-env vulkan1.3 ${GLSL} -o ${SPIRV}
+        COMMAND ${GLSL_VALIDATOR} --target-env vulkan1.4 ${GLSL} -o ${SPIRV}
         DEPENDS ${GLSL} ${GLSL_HEADER_FILES}
     )
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach()
+
+#if(UNIX)
+#    set(SLANG_COMPILER "slangc")
+#elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
+#    set(SLANG_COMPILER "$ENV{VULKAN_SDK}/Bin/slangc.exe")
+#else()
+#    set(SLANG_COMPILER "$ENV{VULKAN_SDK}/Bin32/slangc.exe")
+#endif()
+#
+#set(SPIRV_OUTPUT_DIR "${CMAKE_BINARY_DIR}/Assets/Shaders/")
+#foreach(SLANG ${SLANG_SOURCE_FILES})
+#	get_filename_component(STEM ${SLANG} NAME)
+#    set(SPIRV "${SPIRV_OUTPUT_DIR}${STEM}.spv")
+#	message(STATUS ${SLANG})
+#    add_custom_command(
+#        OUTPUT ${SPIRV}
+#        COMMAND ${CMAKE_COMMAND} -E make_directory "${SPIRV_OUTPUT_DIR}"
+#        COMMAND ${SLANG_COMPILER} -target spirv ${SLANG} -o ${SPIRV} -fvk-use-scalar-layout
+#        DEPENDS ${SLANG} ${SLANG_HEADER_FILES}
+#    )
+#    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+#endforeach()
+
 
 add_custom_target(CompileShaders DEPENDS ${SPIRV_BINARY_FILES})
 add_dependencies(Void CompileShaders)

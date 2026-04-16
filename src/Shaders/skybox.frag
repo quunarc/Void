@@ -3,7 +3,7 @@
 #extension GL_EXT_scalar_block_layout : require
 // Bindless support
 // Enable non uniform qualifier extension
-#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_nonuniform_qualifier : enable
 
 layout(scalar, set = 0, binding = 0) uniform LocalConstants
 {

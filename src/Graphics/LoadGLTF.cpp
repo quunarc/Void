@@ -523,7 +523,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
                     VOID_ERROR("No position data found in model %s", modelPath);
                 }
 
-                if (normalAccessor)
+               if (normalAccessor)
                 {
                     Array<float> scratch;
                     uint32_t normalCount = (uint32_t)normalAccessor->count;
