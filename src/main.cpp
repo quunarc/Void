@@ -23,7 +23,7 @@
 
 #include "Physics/Physics.hpp"
 
-#include "Entity.hpp"
+#include "Scene.hpp"
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
