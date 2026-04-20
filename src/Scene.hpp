@@ -65,17 +65,16 @@ struct Scene
     void initScene(HeapAllocator* inAllocator, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
     void buildScene(Physics& physics);
     void buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, const vec3s& position, vec3s axis,
-                              float angle, const JPH::BodyCreationSettings& shapeSetting);
+                              float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour);
     void buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axis, float angle);
     void shutdownScene(GPUDevice& gpu, Physics& physics);
 
     JPH::BodyCreationSettings sphereSettings;
-    JPH::SphereShape sphereShape{ 850.f };
-    JPH::BodyCreationSettings sphereSettings1;
-    JPH::SphereShape sphereShape1{ 50.f };
+    JPH::SphereShape sphereShape{ 13.5f };
+    JPH::SphereShape sphereShape1{ 1.5f };
 
     uint32_t totalEntities = 1111;
-    uint32_t totalColliders = 2;
+    uint32_t totalColliders = 4;
     uint32_t currentLastEntity;
     uint32_t currentDebugRendererIndex;
 

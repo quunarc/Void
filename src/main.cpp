@@ -229,7 +229,8 @@ int main(int argc, char** argv)
 
     //Debug renderer
     PipelineCreation debugPipelineCreation{};
-    debugPipelineCreation.depthStencil.depthEnable = false;
+    debugPipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    //debugPipelineCreation.depthStencil.depthEnable = false;
 
     //Shader state
     FileReadResult vertDebug = fileReadBinary("Assets/Shaders/debugRendering.vert.spv", &MemoryService::instance()->scratchAllocator);
@@ -343,7 +344,7 @@ int main(int argc, char** argv)
     DebugRendererData* debugRendererDataGPU = reinterpret_cast<DebugRendererData*>(gpu.mapBuffer(debugRendererDataMap));
 
     vec3s newPosition{ 0 };
-
+    bool debugRenderer = true;
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -382,6 +383,12 @@ int main(int argc, char** argv)
                 gpu.resize(Window::instance()->width, Window::instance()->height);
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             }
+
+            if (inputHandler.isKeyJustReleased(Keys::KEY_1))
+            {
+                debugRenderer = !debugRenderer;
+            }
+
             //NOTE: This must be after the OS messages.
             imgui->newFrame();
 
@@ -516,38 +523,41 @@ int main(int argc, char** argv)
                 }
             }
 
-            //Debug
-            gpuCommands->bindPipeline(debugPipeline);
-            gpuCommands->setScissor(nullptr);
-            gpuCommands->setViewport(nullptr);
-
-            Buffer* debugRendererDataBufferf = gpu.accessBuffer(debugRendererDataBuffer);
-            pushConstants.modelPositionAddress = debugRendererDataBufferf->bufferAddress;
-            for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
+            if (debugRenderer)
             {
-                const Entity& entity = scene.entities[entityIndex];
-                if (entity.debugRendererIndex != UINT32_MAX)
+                //Debug
+                gpuCommands->bindPipeline(debugPipeline);
+                gpuCommands->setScissor(nullptr);
+                gpuCommands->setViewport(nullptr);
+
+                Buffer* debugRendererDataBufferf = gpu.accessBuffer(debugRendererDataBuffer);
+                pushConstants.modelPositionAddress = debugRendererDataBufferf->bufferAddress;
+                for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
                 {
-                    globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
+                    const Entity& entity = scene.entities[entityIndex];
+                    if (entity.debugRendererIndex != UINT32_MAX)
+                    {
+                        globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
 
-                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
-                    debugRendererDataGPU[entityIndex].position = convertToMat4(newPos);
-                    debugRendererDataGPU[entityIndex].globalModel = globalModel;
-                    debugRendererDataGPU[entityIndex].viewPerspective = gameCamera.internal3DCamera.viewProjection;
+                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
+                        debugRendererDataGPU[entityIndex].position = convertToMat4(newPos);
+                        debugRendererDataGPU[entityIndex].globalModel = globalModel;
+                        debugRendererDataGPU[entityIndex].viewPerspective = gameCamera.internal3DCamera.viewProjection;
 
-                    pushConstants.index = entity.positionIndex;
-                    VOID_ASSERTM(scene.models[entity.modelIndex].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
+                        pushConstants.index = entity.positionIndex;
+                        VOID_ASSERTM(scene.models[entity.modelIndex].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
 
-                    MeshDraw meshDraw = scene.models[scene.debugSphereIndex].meshDraws[0];
+                        MeshDraw meshDraw = scene.models[scene.debugSphereIndex].meshDraws[0];
 
-                    Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
-                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+                        Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
+                        pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+                        vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+                        gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
 
-                    gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+                        gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+                    }
                 }
             }
             imgui->render(*gpuCommands);

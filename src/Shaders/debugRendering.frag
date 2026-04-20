@@ -8,5 +8,7 @@ layout(location = 0) out vec4 outColour;
 
 void main()
 {
-   outColour = vColour;
+	vec4 finalColour = vColour;
+	finalColour.a *= 0.2;
+    outColour = finalColour;
 }

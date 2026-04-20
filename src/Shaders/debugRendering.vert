@@ -53,6 +53,6 @@ void main()
                          vertexDataReference.vertexData[gl_VertexIndex].py, 
                          vertexDataReference.vertexData[gl_VertexIndex].pz);
 
-    gl_Position = modelPositionsReference.modelPositions[index].viewPerspective * modelPositionsReference.modelPositions[index].globalModel * modelPositionsReference.modelPositions[index].model * modelPositionsReference.modelPositions[index].pos * vec4(position, 1.0);
+    gl_Position = modelPositionsReference.modelPositions[index].viewPerspective * modelPositionsReference.modelPositions[index].globalModel * modelPositionsReference.modelPositions[index].pos * modelPositionsReference.modelPositions[index].model * vec4(position, 1.0);
     vColour = modelPositionsReference.modelPositions[index].colour;
 }

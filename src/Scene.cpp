@@ -35,7 +35,7 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, BufferHandle 
     models[debugSphereIndex].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
 
     currentLastEntity = 0;
-    currentDebugRendererIndex = 0;
+    currentDebugRendererIndex = 0; 
 }
 
 void Scene::buildScene(Physics& physics)
@@ -43,33 +43,46 @@ void Scene::buildScene(Physics& physics)
     vec3s position{ 0.f, 0.f, 0.f };
     sphereSettings.SetShape(&sphereShape);
     sphereSettings.mPosition = convertToJPHVec3(position);
-    sphereSettings.mRotation = JPH::Quat::sIdentity();
     sphereSettings.mMotionType = JPH::EMotionType::Static;
     sphereSettings.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(physics, rockModelIndex, position, { 0.f, 0.f, 0.f }, 0.f, sphereSettings);
+    buildRigidBodyEntity(physics, rockModelIndex, position, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 0.f, 1.f, 1.f });
 
-    vec3s position1{ 5999.f, 0.f, 0.f };
-    sphereSettings1.SetShape(&sphereShape1);
-    sphereSettings1.mPosition = convertToJPHVec3(position1);
-    sphereSettings1.mRotation = JPH::Quat::sIdentity();
-    sphereSettings1.mMotionType = JPH::EMotionType::Dynamic;
-    sphereSettings1.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(physics, duckModelIndex, position1, { 0.f, 0.f, 0.f }, 0.f, sphereSettings1);
+    vec3s position2{ 20.f, 10.f, 10.f };
+    sphereSettings.SetShape(&sphereShape);
+    sphereSettings.mPosition = convertToJPHVec3(position2);
+    sphereSettings.mMotionType = JPH::EMotionType::Static;
+    sphereSettings.mObjectLayer = Layers::MOVING;
+    buildRigidBodyEntity(physics, rockModelIndex, position2, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 0.f, 1.f, 1.f });
+
+    vec3s position1{ 10.f, 59.f, 0.f };
+    sphereSettings.SetShape(&sphereShape1);
+    sphereSettings.mPosition = convertToJPHVec3(position1);
+    sphereSettings.mMotionType = JPH::EMotionType::Dynamic;
+    sphereSettings.mObjectLayer = Layers::MOVING;
+    buildRigidBodyEntity(physics, duckModelIndex, position1, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 1.f, 0.f, 1.f });
+
+    vec3s position3{ 0.f, 0.f, 120.f };
+    sphereSettings.SetShape(&sphereShape1);
+    sphereSettings.mPosition = convertToJPHVec3(position3);
+    sphereSettings.mMotionType = JPH::EMotionType::Dynamic;
+    sphereSettings.mObjectLayer = Layers::MOVING;
+    buildRigidBodyEntity(physics, duckModelIndex, position3, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 1.f, 0.f, 1.f });
 
     // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
     // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
-    physics.bodyInterface->SetLinearVelocity(entities[1].bodyID, JPH::Vec3(-400.f, 0.0f, 0.0f));
+    physics.bodyInterface->SetLinearVelocity(entities[2].bodyID, JPH::Vec3(0.f, -4.f, 0.f));
+    physics.bodyInterface->SetLinearVelocity(entities[3].bodyID, JPH::Vec3(0.f, 0.f, -8.f));
 
     srand(42);
 
-    float sceneRadius = 5000.f;
-    for (uint32_t i = 2; i < totalEntities; ++i)
+    float sceneRadius = 500.f;
+    for (uint32_t i = 4; i < totalEntities; ++i)
     {
-        vec3s postion{};
+        vec3s position{};
 
-        postion.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
-        postion.y = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
-        postion.z = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
+        position.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
+        position.y = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
+        position.z = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
 
         float rotx = ((float(rand()) / RAND_MAX) * 2 - 1);
         float roty = ((float(rand()) / RAND_MAX) * 2 - 1);
@@ -78,22 +91,34 @@ void Scene::buildScene(Physics& physics)
         vec3s axis = glms_normalize({ rotx, roty, rotz });
         float angle = (float(rand()) / RAND_MAX) * M_PI_4;
 
-        buildNoneSoildEntity(rockModelIndex, postion, axis, angle);
+        buildNoneSoildEntity(rockModelIndex, position, axis, angle);
     }
 }
 
-void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, const vec3s& position, vec3s axis, float angle, const JPH::BodyCreationSettings& shapeSetting)
+void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, const vec3s& position, vec3s axis, float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour)
 {
     //Note that this uses the shorthand version of creating and adding a body to the world
     entities[currentLastEntity].bodyID = physics.bodyInterface->CreateAndAddBody(shapeSetting, JPH::EActivation::Activate);
 
-    //TODO: Switch over the shapes that it might be.
-    JPH::RMat44 sphereModel = JPH::RMat44::sTranslation(physics.bodyInterface->GetPosition(entities[currentLastEntity].bodyID));
-    JPH::RMat44 spherePosition = physics.bodyInterface->GetWorldTransform(entities[currentLastEntity].bodyID);
+    JPH::EShapeSubType shapeType = shapeSetting.GetShape()->GetSubType();
+    JPH::RMat44 shapeModel;
+    switch (shapeType) 
+    {
+    case JPH::EShapeSubType::Sphere:
+    {
+        shapeModel = JPH::RMat44::sScale(((JPH::SphereShape*)shapeSetting.GetShape())->GetRadius());
+    }
+        break;
+    default:
+        VOID_ERROR("Shape type not supported.\n");
+    }
 
-    debugRendererData[currentDebugRendererIndex].colour = { 1.f, 0.f, 1.f, 1.f };
-    debugRendererData[currentDebugRendererIndex].position = convertToMat4(spherePosition);
-    debugRendererData[currentDebugRendererIndex].model = glms_mat4_identity();//convertToMat4(sphereModel);
+    //TODO: Switch over the shapes that it might be.
+    JPH::RMat44 shapePosition = physics.bodyInterface->GetWorldTransform(entities[currentLastEntity].bodyID);
+
+    debugRendererData[currentDebugRendererIndex].colour = colour;
+    debugRendererData[currentDebugRendererIndex].position = convertToMat4(shapePosition);
+    debugRendererData[currentDebugRendererIndex].model = convertToMat4(shapeModel);
     debugRendererData[currentDebugRendererIndex].viewPerspective = glms_mat4_identity();
     debugRendererData[currentDebugRendererIndex].globalModel = glms_mat4_identity();
 
@@ -102,7 +127,7 @@ void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, co
     vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
     entityData[currentLastEntity].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(position));
-    entityData[currentLastEntity].colour = { 1.f, 0.f, 1.f, 1.f };
+    entityData[currentLastEntity].colour = colour;
     entities[currentLastEntity].positionIndex = currentLastEntity;
     entities[currentLastEntity].modelIndex = modelIndex;
 
