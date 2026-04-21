@@ -37,23 +37,10 @@ struct Transform
     }
 };
 
-void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout)
+cgltf_data* Model::setupModel(const char* modelPath)
 {
-    HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
-    StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;
-
-    Directory cwd{};
-    directoryCurrent(&cwd);
-
-    char GLTFBasePath[512]{};
-    memcpy(GLTFBasePath, modelPath, strlen(modelPath));
-    fileDirectoryFromPath(GLTFBasePath);
-
-    directoryChange(GLTFBasePath);
-
-    char GLTFFile[512]{};
-    memcpy(GLTFFile, modelPath, strlen(modelPath));
-    fileNameFromPath(GLTFFile);
+    allocator = &MemoryService::instance()->systemAllocator;
+    scratchAllocator = &MemoryService::instance()->scratchAllocator;
 
     cgltf_data* cgltfData = nullptr;
 
@@ -61,13 +48,13 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
     options.memory.alloc_func = tlsf_malloc;
     options.memory.free_func = tlsf_free;
     options.memory.user_data = allocator->TLSFHandle;
-    cgltf_result result = cgltf_parse_file(&options, GLTFFile, &cgltfData);
+    cgltf_result result = cgltf_parse_file(&options, modelPath, &cgltfData);
     if (result != cgltf_result_success)
     {
         VOID_ERROR("File could not be found or loaded.");
     }
 
-    result = cgltf_load_buffers(&options, cgltfData, GLTFFile);
+    result = cgltf_load_buffers(&options, cgltfData, modelPath);
     if (result != cgltf_result_success)
     {
         VOID_ERROR("Could not load buffers from the gltf mdoel");
@@ -79,8 +66,104 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
         VOID_ERROR("The gltf model is invalid");
     }
 
-    images.init(allocator, uint32_t(cgltfData->images_count));
+    currentIndexBuffer = INVALID_BUFFER;
 
+    meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
+
+    //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
+    nodeParents.init(allocator, cgltfData->nodes_count);
+    nodeStack.init(allocator, cgltfData->nodes_count);
+    nodeMatrix.init(allocator, cgltfData->nodes_count);
+
+    //Adding all the root nodes to the array.
+    for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
+    {
+        cgltf_scene cgltfscene = cgltfData->scenes[sceneIndex];
+        for (uint32_t parentIndex = 0; parentIndex < cgltfscene.nodes_count; ++parentIndex)
+        {
+            cgltf_node* parentNode = cgltfscene.nodes[parentIndex];
+            nodeParents.push(-1);
+            nodeStack.push(*parentNode);
+        }
+    }
+
+    for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
+    {
+        for (uint32_t nodeIndex = 0; nodeIndex < cgltfData->nodes_count; ++nodeIndex)
+        {
+            cgltf_node currentNode = nodeStack[nodeIndex];
+
+            mat4s localMatrix = glms_mat4_identity();
+
+            if (currentNode.has_matrix)
+            {
+                //CGLM and glTF have the same matrix layout, just memcpy it.
+                memcpy(&localMatrix, currentNode.matrix, sizeof(mat4s));
+            }
+            else
+            {
+                vec3s nodeScale = { 1.f, 1.f, 1.f };
+                if (currentNode.has_scale)
+                {
+                    nodeScale = vec3s{ currentNode.scale[0], currentNode.scale[1], currentNode.scale[2] };
+                }
+
+                vec3s nodeTranslation = { 0.f, 0.f, 0.f };
+                if (currentNode.has_translation)
+                {
+                    nodeTranslation = vec3s{ currentNode.translation[0], currentNode.translation[1], currentNode.translation[2] };
+                }
+
+                //Rotation is written as a plain quaterion.
+                versors nodeRotation = glms_quat_identity();
+                if (currentNode.has_rotation)
+                {
+                    nodeRotation = glms_quat_init(currentNode.rotation[0], currentNode.rotation[1], currentNode.rotation[2], currentNode.rotation[3]);
+                }
+
+                Transform transform;
+                transform.reset();
+                transform.translation = nodeTranslation;
+                transform.scale = nodeScale;
+                transform.rotation = nodeRotation;
+
+                localMatrix = transform.calculateMatrix();
+            }
+
+            nodeMatrix.push(localMatrix);
+
+            if (currentNode.children != nullptr && currentNode.children[0] != nullptr)
+            {
+                for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
+                {
+                    if (currentNode.children[childIndex] != nullptr)
+                    {
+                        cgltf_node childNode = *currentNode.children[childIndex];
+                        nodeStack.push(childNode);
+                    }
+                    nodeParents.push(nodeIndex);
+                }
+            }
+
+            finalMatrix = localMatrix;
+            int32_t parentNodeIndex = nodeParents[nodeIndex];
+            while (parentNodeIndex != -1)
+            {
+                finalMatrix = glms_mat4_mul(nodeMatrix[parentNodeIndex], finalMatrix);
+                parentNodeIndex = nodeParents[parentNodeIndex];
+            }
+        }
+    }
+
+    return cgltfData;
+}
+
+void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout)
+{
+    isModel = true;
+    cgltf_data* cgltfData = setupModel(modelPath);
+
+    images.init(allocator, cgltfData->images_count);
     //GLB version.
     for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
     {
@@ -170,8 +253,6 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
             stbi_image_free(textureData);
         }
     }
-    //NOTE: resource working directory
-    directoryChange(cwd.path);
 
     SamplerCreation samplerCreation{};
     samplerCreation.minFilter = VK_FILTER_LINEAR;
@@ -202,102 +283,11 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
         samplers.push(newSampler);
     }
 
-    //NOTE: resource working directory
-    directoryChange(cwd.path);
-
-    BufferHandle currentIndexBuffer = INVALID_BUFFER;
-
-    meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
-
-    vertices.init(allocator, 256);
-
-    //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
-    Array<int32_t> nodeParents;
-    nodeParents.init(allocator, cgltfData->nodes_count);
-    Array<cgltf_node> nodeStack;
-    nodeStack.init(allocator, cgltfData->nodes_count);
-
-    Array<mat4s> nodeMatrix;
-    nodeMatrix.init(allocator, cgltfData->nodes_count);
-
-    //Adding all the root nodes to the array.
-    for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
-    {
-        cgltf_scene cgltfscene = cgltfData->scenes[sceneIndex];
-        for (uint32_t parentIndex = 0; parentIndex < cgltfscene.nodes_count; ++parentIndex)
-        {
-            cgltf_node* parentNode = cgltfscene.nodes[parentIndex];
-            nodeParents.push(-1);
-            nodeStack.push(*parentNode);
-        }
-    }
-
-    mat4s finalMatrix = glms_mat4_identity();
     for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
     {
         for (uint32_t nodeIndex = 0; nodeIndex < cgltfData->nodes_count; ++nodeIndex)
         {
             cgltf_node currentNode = nodeStack[nodeIndex];
-
-            mat4s localMatrix = glms_mat4_identity();
-
-            if (currentNode.has_matrix)
-            {
-                //CGLM and glTF have the same matrix layout, just memcpy it.
-                memcpy(&localMatrix, currentNode.matrix, sizeof(mat4s));
-            }
-            else
-            {
-                vec3s nodeScale = { 1.f, 1.f, 1.f };
-                if (currentNode.has_scale)
-                {
-                    nodeScale = vec3s{ currentNode.scale[0], currentNode.scale[1], currentNode.scale[2] };
-                }
-
-                vec3s nodeTranslation = { 0.f, 0.f, 0.f };
-                if (currentNode.has_translation)
-                {
-                    nodeTranslation = vec3s{ currentNode.translation[0], currentNode.translation[1], currentNode.translation[2] };
-                }
-
-                //Rotation is written as a plain quaterion.
-                versors nodeRotation = glms_quat_identity();
-                if (currentNode.has_rotation)
-                {
-                    nodeRotation = glms_quat_init(currentNode.rotation[0], currentNode.rotation[1], currentNode.rotation[2], currentNode.rotation[3]);
-                }
-
-                Transform transform;
-                transform.reset();
-                transform.translation = nodeTranslation;
-                transform.scale = nodeScale;
-                transform.rotation = nodeRotation;
-
-                localMatrix = transform.calculateMatrix();
-            }
-
-            nodeMatrix.push(localMatrix);
-
-            if (currentNode.children != nullptr && currentNode.children[0] != nullptr)
-            {
-                for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
-                {
-                    if (currentNode.children[childIndex] != nullptr)
-                    {
-                        cgltf_node childNode = *currentNode.children[childIndex];
-                        nodeStack.push(childNode);
-                    }
-                    nodeParents.push(nodeIndex);
-                }
-            }
-
-            finalMatrix = localMatrix;
-            int32_t parentNodeIndex = nodeParents[nodeIndex];
-            while (parentNodeIndex != -1)
-            {
-                finalMatrix = glms_mat4_mul(nodeMatrix[parentNodeIndex], finalMatrix);
-                parentNodeIndex = nodeParents[parentNodeIndex];
-            }
 
             cgltf_mesh* mesh = nodeStack[nodeIndex].mesh;
             if (mesh == nullptr)
@@ -320,11 +310,11 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
                 meshDraw.count = indexCount;
                 meshDraw.componentType = meshPrimitive.indices->component_type == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
 
-                size_t stackPrimitveMarker = scratchAllocator.getMarker();
+                size_t stackPrimitveMarker = scratchAllocator->getMarker();
 
                 uint32_t indexCompenentSize = (uint32_t)cgltf_component_size(meshPrimitive.indices->component_type);
                 Array<uint32_t> indices;
-                indices.init(&scratchAllocator, indexCount, indexCount);
+                indices.init(scratchAllocator, indexCount, indexCount);
                 cgltf_accessor_unpack_indices(meshPrimitive.indices, indices.data, indexCompenentSize, indices.size);
 
                 BufferCreation bufferCreation{};
@@ -498,12 +488,12 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
 
                 uint32_t vertexCount = uint32_t(positionAccessor->count);
                 Array<Vertices> vertex;
-                vertex.init(&scratchAllocator, vertexCount, vertexCount);
+                vertex.init(scratchAllocator, vertexCount, vertexCount);
                 if (positionAccessor)
                 {
                     Array<float> scratch;
                     uint32_t accessFloatSize = (uint32_t)cgltf_num_components(positionAccessor->type);
-                    scratch.init(&scratchAllocator, vertexCount * accessFloatSize, vertexCount * accessFloatSize);
+                    scratch.init(scratchAllocator, vertexCount * accessFloatSize, vertexCount * accessFloatSize);
                     VOID_ASSERT(cgltf_num_components(positionAccessor->type) == 3);
                     cgltf_accessor_unpack_floats(positionAccessor, scratch.data, positionAccessor->count * accessFloatSize);
 
@@ -524,7 +514,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
                     Array<float> scratch;
                     uint32_t normalCount = (uint32_t)normalAccessor->count;
                     uint32_t accessFloatSize = (uint32_t)cgltf_num_components(normalAccessor->type);
-                    scratch.init(&scratchAllocator, normalCount * accessFloatSize, normalCount * accessFloatSize);
+                    scratch.init(scratchAllocator, normalCount * accessFloatSize, normalCount * accessFloatSize);
                     VOID_ASSERT(cgltf_num_components(normalAccessor->type) == 3);
                     cgltf_accessor_unpack_floats(normalAccessor, scratch.data, normalAccessor->count * accessFloatSize);
 
@@ -545,7 +535,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
                     Array<float> scratch;
                     uint32_t tangentCount = uint32_t(tangentAccessor->count);
                     uint32_t accessFloatSize = (uint32_t)cgltf_num_components(tangentAccessor->type);
-                    scratch.init(&scratchAllocator, tangentCount * accessFloatSize, tangentCount * accessFloatSize);
+                    scratch.init(scratchAllocator, tangentCount * accessFloatSize, tangentCount * accessFloatSize);
                     VOID_ASSERT(cgltf_num_components(tangentAccessor->type) == 4);
                     cgltf_accessor_unpack_floats(tangentAccessor, scratch.data, tangentAccessor->count * accessFloatSize);
 
@@ -567,7 +557,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
                     Array<float> scratch;
                     uint32_t textureCount = (uint32_t)textureAccessor->count;
                     uint32_t accessFloatSize = (uint32_t)cgltf_num_components(textureAccessor->type);
-                    scratch.init(&scratchAllocator, textureCount * accessFloatSize, textureCount * accessFloatSize);
+                    scratch.init(scratchAllocator, textureCount * accessFloatSize, textureCount * accessFloatSize);
                     VOID_ASSERT(cgltf_num_components(textureAccessor->type) == 2);
                     cgltf_accessor_unpack_floats(textureAccessor, scratch.data, textureAccessor->count * accessFloatSize);
 
@@ -584,7 +574,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
                     .setData(vertex.data);
                 meshDraw.vertexBuffer = gpu.createBindlessBuffer(bufferCreation);
 
-                scratchAllocator.freeMarker(stackPrimitveMarker);
+                scratchAllocator->freeMarker(stackPrimitveMarker);
 
                 meshDraw.descriptorSet = gpu.createDescriptorSet(dsCreation);
                 meshDraws.push(meshDraw);
@@ -601,145 +591,14 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
 
 void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
 {
-    HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
-    StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;
+    isModel = false;
 
-    Directory cwd{};
-    directoryCurrent(&cwd);
+    cgltf_data* cgltfData = setupModel(modelPath);
 
-    char GLTFBasePath[512]{};
-    memcpy(GLTFBasePath, modelPath, strlen(modelPath));
-    fileDirectoryFromPath(GLTFBasePath);
-
-    directoryChange(GLTFBasePath);
-
-    char GLTFFile[512]{};
-    memcpy(GLTFFile, modelPath, strlen(modelPath));
-    fileNameFromPath(GLTFFile);
-
-    cgltf_data* cgltfData = nullptr;
-
-    cgltf_options options{};
-    options.memory.alloc_func = tlsf_malloc;
-    options.memory.free_func = tlsf_free;
-    options.memory.user_data = allocator->TLSFHandle;
-    cgltf_result result = cgltf_parse_file(&options, GLTFFile, &cgltfData);
-    if (result != cgltf_result_success)
-    {
-        VOID_ERROR("File could not be found or loaded.");
-    }
-
-    result = cgltf_load_buffers(&options, cgltfData, GLTFFile);
-    if (result != cgltf_result_success)
-    {
-        VOID_ERROR("Could not load buffers from the gltf mdoel");
-    }
-
-    result = cgltf_validate(cgltfData);
-    if (result != cgltf_result_success)
-    {
-        VOID_ERROR("The gltf model is invalid");
-    }
-
-    //NOTE: resource working directory
-    directoryChange(cwd.path);
-
-    resourceNameBuffer.init(void_kilo(64), allocator);
-
-    BufferHandle currentIndexBuffer = INVALID_BUFFER;
-
-    meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
-
-    vertices.init(allocator, 256);
-
-    //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
-    Array<int32_t> nodeParents;
-    nodeParents.init(allocator, cgltfData->nodes_count);
-    Array<cgltf_node> nodeStack;
-    nodeStack.init(allocator, cgltfData->nodes_count);
-
-    Array<mat4s> nodeMatrix;
-    nodeMatrix.init(allocator, cgltfData->nodes_count);
-
-    //Adding all the root nodes to the array.
-    for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
-    {
-        cgltf_scene cgltfscene = cgltfData->scenes[sceneIndex];
-        for (uint32_t parentIndex = 0; parentIndex < cgltfscene.nodes_count; ++parentIndex)
-        {
-            cgltf_node* parentNode = cgltfscene.nodes[parentIndex];
-            nodeParents.push(-1);
-            nodeStack.push(*parentNode);
-        }
-    }
-
-    mat4s finalMatrix = glms_mat4_identity();
     for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
     {
         for (uint32_t nodeIndex = 0; nodeIndex < cgltfData->nodes_count; ++nodeIndex)
         {
-            cgltf_node currentNode = nodeStack[nodeIndex];
-
-            mat4s localMatrix = glms_mat4_identity();
-
-            if (currentNode.has_matrix)
-            {
-                //CGLM and glTF have the same matrix layout, just memcpy it.
-                memcpy(&localMatrix, currentNode.matrix, sizeof(mat4s));
-            }
-            else
-            {
-                vec3s nodeScale = { 1.f, 1.f, 1.f };
-                if (currentNode.has_scale)
-                {
-                    nodeScale = vec3s{ currentNode.scale[0], currentNode.scale[1], currentNode.scale[2] };
-                }
-
-                vec3s nodeTranslation = { 0.f, 0.f, 0.f };
-                if (currentNode.has_translation)
-                {
-                    nodeTranslation = vec3s{ currentNode.translation[0], currentNode.translation[1], currentNode.translation[2] };
-                }
-
-                //Rotation is written as a plain quaterion.
-                versors nodeRotation = glms_quat_identity();
-                if (currentNode.has_rotation)
-                {
-                    nodeRotation = glms_quat_init(currentNode.rotation[0], currentNode.rotation[1], currentNode.rotation[2], currentNode.rotation[3]);
-                }
-
-                Transform transform;
-                transform.reset();
-                transform.translation = nodeTranslation;
-                transform.scale = nodeScale;
-                transform.rotation = nodeRotation;
-
-                localMatrix = transform.calculateMatrix();
-            }
-
-            nodeMatrix.push(localMatrix);
-
-            if (currentNode.children != nullptr && currentNode.children[0] != nullptr)
-            {
-                for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
-                {
-                    if (currentNode.children[childIndex] != nullptr)
-                    {
-                        cgltf_node childNode = *currentNode.children[childIndex];
-                        nodeStack.push(childNode);
-                    }
-                    nodeParents.push(nodeIndex);
-                }
-            }
-
-            finalMatrix = localMatrix;
-            int32_t parentNodeIndex = nodeParents[nodeIndex];
-            while (parentNodeIndex != -1)
-            {
-                finalMatrix = glms_mat4_mul(nodeMatrix[parentNodeIndex], finalMatrix);
-                parentNodeIndex = nodeParents[parentNodeIndex];
-            }
-
             cgltf_mesh* mesh = nodeStack[nodeIndex].mesh;
             if (mesh == nullptr)
             {
@@ -750,7 +609,6 @@ void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
             for (uint32_t primitiveIndex = 0; primitiveIndex < (uint32_t)mesh->primitives_count; ++primitiveIndex)
             {
                 MeshDraw meshDraw{};
-
                 meshDraw.model = finalMatrix;
 
                 cgltf_primitive meshPrimitive = mesh->primitives[primitiveIndex];
@@ -761,11 +619,11 @@ void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
                 meshDraw.count = indexCount;
                 meshDraw.componentType = meshPrimitive.indices->component_type == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
 
-                size_t stackPrimitveMarker = scratchAllocator.getMarker();
+                size_t stackPrimitveMarker = scratchAllocator->getMarker();
 
                 uint32_t indexCompenentSize = (uint32_t)cgltf_component_size(meshPrimitive.indices->component_type);
                 Array<uint32_t> indices;
-                indices.init(&scratchAllocator, indexCount, indexCount);
+                indices.init(scratchAllocator, indexCount, indexCount);
                 cgltf_accessor_unpack_indices(meshPrimitive.indices, indices.data, indexCompenentSize, indices.size);
 
                 BufferCreation bufferCreation{};
@@ -780,12 +638,12 @@ void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
 
                 uint32_t vertexCount = uint32_t(positionAccessor->count);
                 Array<ColliderVertices> vertex;
-                vertex.init(&scratchAllocator, vertexCount, vertexCount);
+                vertex.init(scratchAllocator, vertexCount, vertexCount);
                 if (positionAccessor)
                 {
                     Array<float> scratch;
                     uint32_t accessFloatSize = (uint32_t)cgltf_num_components(positionAccessor->type);
-                    scratch.init(&scratchAllocator, vertexCount * accessFloatSize, vertexCount * accessFloatSize);
+                    scratch.init(scratchAllocator, vertexCount * accessFloatSize, vertexCount * accessFloatSize);
                     VOID_ASSERT(cgltf_num_components(positionAccessor->type) == 3);
                     cgltf_accessor_unpack_floats(positionAccessor, scratch.data, positionAccessor->count * accessFloatSize);
 
@@ -807,7 +665,7 @@ void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
                     .setData(vertex.data);
                 meshDraw.vertexBuffer = gpu.createBindlessBuffer(bufferCreation);
 
-                scratchAllocator.freeMarker(stackPrimitveMarker);
+                scratchAllocator->freeMarker(stackPrimitveMarker);
 
                 meshDraws.push(meshDraw);
             }
@@ -826,30 +684,34 @@ void Model::shutdownModel(GPUDevice& gpu)
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
         MeshDraw& meshDraw = meshDraws[meshIndex];
-        gpu.destroyDescriptorSet(meshDraw.descriptorSet);
-        gpu.destroyBuffer(meshDraw.materialBuffer);
+        if (isModel)
+        {
+            gpu.destroyDescriptorSet(meshDraw.descriptorSet);
+            gpu.destroyBuffer(meshDraw.materialBuffer);
+        }
         gpu.destroyBuffer(meshDraw.vertexBuffer);
         gpu.destroyBuffer(meshDraw.indexBuffer);
     }
 
     meshDraws.shutdown();
 
-    gpu.destroySampler(dummySampler);
-
-    //This is here to solve a bug that happens when allocating image from a .glb file. 
-    for (uint32_t i = 0; i < images.size; ++i)
+    if (isModel)
     {
-        gpu.destroyTexture(images[i]);
+        gpu.destroySampler(dummySampler);
+
+        //This is here to solve a bug that happens when allocating image from a .glb file. 
+        for (uint32_t i = 0; i < images.size; ++i)
+        {
+            gpu.destroyTexture(images[i]);
+        }
+
+        for (uint32_t i = 0; i < samplers.size; ++i)
+        {
+            gpu.destroySampler(samplers[i]);
+        }
+
+        images.shutdown();
+        samplers.shutdown();
+        resourceNameBuffer.shutdown();
     }
-
-    for (uint32_t i = 0; i < samplers.size; ++i)
-    {
-        gpu.destroySampler(samplers[i]);
-    }
-
-    vertices.shutdown();
-    samplers.shutdown();
-    images.shutdown();
-
-    resourceNameBuffer.shutdown();
 }

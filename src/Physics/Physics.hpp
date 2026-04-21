@@ -184,8 +184,8 @@ struct Physics
         JPH::UnregisterTypes();
 
         // Destroy the factory
-        //delete JPH::Factory::sInstance;
-        //JPH::Factory::sInstance = nullptr;
+        delete JPH::Factory::sInstance;
+        JPH::Factory::sInstance = nullptr;
     }
     JPH::TempAllocatorImpl tempAllocator;
 

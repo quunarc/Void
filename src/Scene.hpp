@@ -70,8 +70,7 @@ struct Scene
     void shutdownScene(GPUDevice& gpu, Physics& physics);
 
     JPH::BodyCreationSettings sphereSettings;
-    JPH::SphereShape sphereShape{ 13.5f };
-    JPH::SphereShape sphereShape1{ 1.5f };
+    JPH::BodyCreationSettings sphereSettings2;
 
     uint32_t totalEntities = 1111;
     uint32_t totalColliders = 4;

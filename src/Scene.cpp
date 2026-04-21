@@ -1,25 +1,7 @@
 #include "Scene.hpp"
 
 #include "Foundation/Memory.hpp"
-
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/rock.glb";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/riggedModel.glb";
-
-//I might try to remove this later.
-#define InjectDefault3DModel() \
-if (fileExists(DEFAULT_3D_MODEL)) \
-{\
-    argc = 2;\
-    argv[1] = const_cast<char*>(DEFAULT_3D_MODEL);\
-}\
-else \
-{\
-    vprint("Could not find file.");\
-    exit(-1);\
-}\
+#include "Foundation/File.hpp"
 
 void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout)
 {
@@ -30,43 +12,58 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, BufferHandle 
     debugRendererData.init(allocator, totalColliders, totalColliders);
     models.init(allocator, 3, 3);
 
-    models[rockModelIndex].loadModel(DEFAULT_3D_MODEL, gpu, sceneBuffer, descriptorSetLayout);
+    models[rockModelIndex].loadModel("Assets/Models/out/rock.glb", gpu, sceneBuffer, descriptorSetLayout);
     models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, sceneBuffer, descriptorSetLayout);
     models[debugSphereIndex].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
 
     currentLastEntity = 0;
-    currentDebugRendererIndex = 0; 
+    currentDebugRendererIndex = 0;
 }
 
 void Scene::buildScene(Physics& physics)
 {
+    JPH::SphereShapeSettings rockSphereSetting{13.5f};
+    JPH::SphereShapeSettings duckSphereSettings{1.5f};
+    rockSphereSetting.SetEmbedded();
+    duckSphereSettings.SetEmbedded();
+
+    JPH::ShapeSettings::ShapeResult rockShapeResult = rockSphereSetting.Create();
+    JPH::ShapeRefC rockShapeRef = rockShapeResult.Get();
+
+    JPH::ShapeSettings::ShapeResult duckShapeResult = duckSphereSettings.Create();
+    JPH::ShapeRefC duckShapeRef = duckShapeResult.Get();
+
     vec3s position{ 0.f, 0.f, 0.f };
-    sphereSettings.SetShape(&sphereShape);
+    sphereSettings.SetShape(rockShapeRef);
     sphereSettings.mPosition = convertToJPHVec3(position);
+    sphereSettings.mRotation = JPH::Quat::sIdentity();
     sphereSettings.mMotionType = JPH::EMotionType::Static;
     sphereSettings.mObjectLayer = Layers::MOVING;
     buildRigidBodyEntity(physics, rockModelIndex, position, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 0.f, 1.f, 1.f });
 
     vec3s position2{ 20.f, 10.f, 10.f };
-    sphereSettings.SetShape(&sphereShape);
+    sphereSettings.SetShape(rockShapeRef);
     sphereSettings.mPosition = convertToJPHVec3(position2);
+    sphereSettings.mRotation = JPH::Quat::sIdentity();
     sphereSettings.mMotionType = JPH::EMotionType::Static;
     sphereSettings.mObjectLayer = Layers::MOVING;
     buildRigidBodyEntity(physics, rockModelIndex, position2, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 0.f, 1.f, 1.f });
 
     vec3s position1{ 10.f, 59.f, 0.f };
-    sphereSettings.SetShape(&sphereShape1);
-    sphereSettings.mPosition = convertToJPHVec3(position1);
-    sphereSettings.mMotionType = JPH::EMotionType::Dynamic;
-    sphereSettings.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(physics, duckModelIndex, position1, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 1.f, 0.f, 1.f });
+    sphereSettings2.SetShape(duckShapeRef);
+    sphereSettings2.mPosition = convertToJPHVec3(position1);
+    sphereSettings2.mRotation = JPH::Quat::sIdentity();
+    sphereSettings2.mMotionType = JPH::EMotionType::Dynamic;
+    sphereSettings2.mObjectLayer = Layers::MOVING;
+    buildRigidBodyEntity(physics, duckModelIndex, position1, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
 
     vec3s position3{ 0.f, 0.f, 120.f };
-    sphereSettings.SetShape(&sphereShape1);
-    sphereSettings.mPosition = convertToJPHVec3(position3);
-    sphereSettings.mMotionType = JPH::EMotionType::Dynamic;
-    sphereSettings.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(physics, duckModelIndex, position3, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 1.f, 0.f, 1.f });
+    sphereSettings2.SetShape(duckShapeRef);
+    sphereSettings2.mPosition = convertToJPHVec3(position3);
+    sphereSettings2.mRotation = JPH::Quat::sIdentity();
+    sphereSettings2.mMotionType = JPH::EMotionType::Dynamic;
+    sphereSettings2.mObjectLayer = Layers::MOVING;
+    buildRigidBodyEntity(physics, duckModelIndex, position3, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
 
     // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
     // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
@@ -78,8 +75,6 @@ void Scene::buildScene(Physics& physics)
     float sceneRadius = 500.f;
     for (uint32_t i = 4; i < totalEntities; ++i)
     {
-        vec3s position{};
-
         position.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
         position.y = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
         position.z = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
@@ -119,8 +114,6 @@ void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, co
     debugRendererData[currentDebugRendererIndex].colour = colour;
     debugRendererData[currentDebugRendererIndex].position = convertToMat4(shapePosition);
     debugRendererData[currentDebugRendererIndex].model = convertToMat4(shapeModel);
-    debugRendererData[currentDebugRendererIndex].viewPerspective = glms_mat4_identity();
-    debugRendererData[currentDebugRendererIndex].globalModel = glms_mat4_identity();
 
     entities[currentLastEntity].debugRendererIndex = currentDebugRendererIndex;
 
@@ -150,17 +143,19 @@ void Scene::buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axi
 
 void Scene::shutdownScene(GPUDevice& gpu, Physics& physics)
 {
+    for (uint32_t i = 0; i < totalColliders; ++i)
+    {
+        physics.bodyInterface->RemoveBody(entities[i].bodyID);
+        physics.bodyInterface->DestroyBody(entities[i].bodyID);
+    }
+
     for (uint32_t i = 0; i < models.size; ++i)
     {
         models[i].shutdownModel(gpu);
     }
     models.shutdown();
 
-    for (uint32_t i = 0; i < entities.size; ++i)
-    {
-        physics.bodyInterface->RemoveBody(entities[i].bodyID);
-        physics.bodyInterface->DestroyBody(entities[i].bodyID);
-    }
-
     entities.shutdown();
+    entityData.shutdown();
+    debugRendererData.shutdown();
 }

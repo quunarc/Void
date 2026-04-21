@@ -48,7 +48,7 @@ void GameCamera::update(InputHandler* input, float windowWidth, float windowHeig
     internal3DCamera.update();
 
     //Ignore first dragging frames for mouse movement waiting the cursor to be placed at the center of the screen.
-    if (input->isMouseDragging(MOUSE_BUTTON_RIGHT) && !ImGui::IsAnyItemHovered())
+    if (input->isMouseDragging(MOUSE_BUTTON_RIGHT) /*&& !ImGui::IsAnyItemHovered()*/)
     {
         if (ignoreDraggingFrames == 0) 
         {

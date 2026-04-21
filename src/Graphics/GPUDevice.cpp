@@ -250,6 +250,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         info.subresourceRange.layerCount = creation.layerCount;
         check(vkCreateImageView(gpu.vulkanDevice, &info, gpu.vulkanAllocationCallbacks, &texture->vkImageView));
 
+        VkDebugUtilsObjectNameInfoEXT nameInfo{};
+        nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+        nameInfo.objectHandle = std::bit_cast<uint64_t>(texture->vkImageView);
+        nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+        nameInfo.pObjectName = creation.name;
+
         gpu.setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)(texture->vkImageView), creation.name);
         texture->vkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -743,6 +749,7 @@ vprint("Instance created.\n");
     {
         PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT =
             (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vulkanInstance, "vkCreateDebugUtilsMessengerEXT");
+
         VkDebugUtilsMessengerCreateInfoEXT debugMessenegerCreateInfo = createDebugUtilsMessengerInfo();
 
         vkCreateDebugUtilsMessengerEXT(vulkanInstance, &debugMessenegerCreateInfo, vulkanAllocationCallbacks, &vulkanDebugUtilsMessenger);
@@ -1139,18 +1146,6 @@ void GPUDevice::shutdown()
     framesInFlight.shutdown();
 
     gpuTimestampManager->shutdown();
-
-    destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
-    destroyDescriptorSet(bindlessDescriptorSetHandle);
-
-    //Memory: this contains allocation for GPU timestamp memory, queued command buffers and render frames.
-    void_free(gpuTimestampManager, allocator);
-
-    destroyTexture(depthTexture);
-    destroyBuffer(fullscreenVertexBuffer);
-    destroyTexture(dummyTexture);
-    destroySampler(defaultSampler);
-
     //Add pending bindless textures to delete.
     for (uint32_t i = 0; i < textureToUpdateBindless.size; ++i)
     {
@@ -1158,13 +1153,24 @@ void GPUDevice::shutdown()
         destroyTextureInstant(update.handle);
     }
 
+    destroySampler(defaultSampler);
+    destroyBuffer(fullscreenVertexBuffer);
+    destroyTexture(dummyTexture);
+    destroyTexture(depthTexture);
+
+    destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
+    destroyDescriptorSet(bindlessDescriptorSetHandle);
+
+    //Memory: this contains allocation for GPU timestamp memory, queued command buffers and render frames.
+    void_free(gpuTimestampManager, allocator);
+
     //Destroy all pending resources.
     for (uint32_t i = 0; i < resourceDeletionQueue.size; ++i)
     {
         ResourceUpdate& resourceDeletion = resourceDeletionQueue[i];
 
         //Skip just freed resources.
-        if (resourceDeletion.currentFrame == UINT_MAX)
+        if (resourceDeletion.currentFrame == UINT32_MAX)
         {
             continue;
         }

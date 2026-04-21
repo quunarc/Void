@@ -10,6 +10,8 @@
 #include "cglm/struct/quat.h"
 #include "cglm/struct/affine.h"
 
+#include <cgltf.h>
+
 struct Vertices
 {
     float position[3];
@@ -72,19 +74,34 @@ struct MaterialData
     uint32_t flags;
 };
 
+struct cgltf_data;
+
 struct Model
 {
-    Array<MeshDraw> meshDraws;
-
+    cgltf_data* setupModel(const char* modelPath);
     void loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
     void loadCollider(const char* modelPath, GPUDevice& gpu);
     void shutdownModel(GPUDevice& gpu);
 
-    Array<Vertices> vertices;
+    Array<MeshDraw> meshDraws;
+
+    mat4s finalMatrix;
+
     Array<SamplerHandle> samplers;
     Array<TextureHandle> images;
+
     StringBuffer resourceNameBuffer;
 
+    Array<int32_t> nodeParents;
+    Array<cgltf_node> nodeStack;
+    Array<mat4s> nodeMatrix;
+
+    HeapAllocator* allocator;
+    StackAllocator* scratchAllocator;
+
+    BufferHandle currentIndexBuffer = INVALID_BUFFER;
+
     SamplerHandle dummySampler;
+    bool isModel;
 };
 #endif // !LOAD_GLTF_HDR

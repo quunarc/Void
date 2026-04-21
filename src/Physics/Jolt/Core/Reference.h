@@ -37,7 +37,11 @@ public:
 	/// Constructor
 	inline					RefTarget() = default;
 	inline					RefTarget(const RefTarget &)					{ /* Do not copy refcount */ }
-	inline					~RefTarget()									{ JPH_IF_ENABLE_ASSERTS(uint32 value = mRefCount.load(memory_order_relaxed);) JPH_ASSERT(value == 0 || value == cEmbedded); } ///< assert no one is referencing us
+	inline					~RefTarget()									
+	{ 
+		JPH_IF_ENABLE_ASSERTS(uint32 value = mRefCount.load(memory_order_relaxed);)
+			JPH_ASSERT(value == 0 || value == cEmbedded); 
+	} ///< assert no one is referencing us
 
 	/// Mark this class as embedded, this means the type can be used in a compound or constructed on the stack.
 	/// The Release function will never destruct the object, it is assumed the destructor will be called by whoever allocated

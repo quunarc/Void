@@ -415,9 +415,7 @@ int main(int argc, char** argv)
             beginFrameTick = currentTick;
 
             physics.updatePhysics();
-
-            inputHandler.newFrame();
-            inputHandler.update();
+            
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
@@ -487,7 +485,6 @@ int main(int argc, char** argv)
                 memcpy(cbData, &uniformData, sizeof(UniformData));
             }
 
-            //newPosition.z += deltaTime;
             Buffer* positionBuf = gpu.accessBuffer(positionalBuffer);
 
             pushConstants.modelPositionAddress = positionBuf->bufferAddress;
@@ -579,6 +576,7 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
+    gpu.unmapBuffer(debugRendererDataMap);
     gpu.unmapBuffer(cbMap);
     gpu.unmapBuffer(skyboxMaterialMap);
     gpu.unmapBuffer(skyboxCBMap);
@@ -589,6 +587,9 @@ int main(int argc, char** argv)
     gpu.destroyDescriptorSet(skyboxDescriptorSet);
     gpu.destroyBuffer(skyboxMaterialBuffer);
     gpu.destroyBuffer(skyboxUniformBuffer);
+    gpu.destroyBuffer(debugRendererDataBuffer);
+
+    scene.shutdownScene(gpu, physics);
 
     gpu.destroySampler(skyboxSampler);
     gpu.destroyTexture(skyboxTextureHandle);
@@ -598,6 +599,7 @@ int main(int argc, char** argv)
     gpu.destroyDescriptorSetLayout(skyboxDescriptorSetLayout);
     gpu.destroyPipeline(cubePipeline);
     gpu.destroyPipeline(skyboxPipeline);
+    gpu.destroyPipeline(debugPipeline);
 
     imgui->shutdown();
 
