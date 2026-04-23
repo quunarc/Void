@@ -4,9 +4,9 @@
 
 #include "Graphics/GPUDevice.hpp"
 #include "Graphics/CommandBuffer.hpp"
-#include "Graphics/Renderer.hpp"
 #include "Graphics/VoidImgui.hpp"
 #include "Graphics/GPUProfiler.hpp"
+#include "Graphics/LoadGLTF.hpp"
 
 #include "cglm/struct/mat3.h"
 #include "cglm/struct/mat4.h"
@@ -18,136 +18,51 @@
 
 #include "Foundation/File.hpp"
 #include "Foundation/Numerics.hpp"
-#include "Foundation/ResourceManager.hpp"
 #include "Foundation/Time.hpp"
+#include "Foundation/Array.hpp"
 
-#include <cgltf.h>
-#include <tlsf.h>
+#include "Physics/Physics.hpp"
+
+#include "Scene.hpp"
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
-#include <stb_image.h>
-
-#include <meshoptimizer.h>
-
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/rock.glb";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/riggedModel.glb";
-
-//I might try to remove this later.
-#define InjectDefault3DModel() \
-if (fileExists(DEFAULT_3D_MODEL)) \
-{\
-    argc = 2;\
-    argv[1] = const_cast<char*>(DEFAULT_3D_MODEL);\
-}\
-else \
-{\
-    vprint("Could not find file.");\
-    exit(-1);\
-}\
+#include <vender/stb_image.h>
 
 namespace
 {
     //TODO: Figure out if you need this stuff.
     PipelineHandle cubePipeline;
-    BufferHandle cubeCB;
-    DescriptorSetLayoutHandle cubeDSL;
+    PipelineHandle skyboxPipeline;
+    PipelineHandle debugPipeline;
+    BufferHandle sceneBuffer;
+    BufferHandle skyboxUniformBuffer;
+    BufferHandle skyboxMaterialBuffer;
+    DescriptorSetLayoutHandle mainDescriptorSetLayout;
+    DescriptorSetLayoutHandle skyboxDescriptorSetLayout;
+    DescriptorSetHandle skyboxDescriptorSet;
 
     BufferHandle positionalBuffer;
+    BufferHandle debugRendererDataBuffer;
 
-    struct MaterialData
+    struct SkyboxData
     {
-        mat4s model;
-        mat4s modelInv;
-
-        uint32_t textures[4];
-        vec4s baseColourFactor;
-        vec4s metallicRoughnessOcclusionFactor;
-        float alphaCutoff;
-
-        vec3s emissiveFactor;
-        uint32_t emissiveTextureIndex;
-        uint32_t flags;
-    };
-
-    struct Vertices
-    {
-        float position[3];
-        uint8_t tangent[4];
-        uint8_t normals[4];
-        uint16_t texCoord0[2];
-    };
-
-    struct MeshDraw
-    {
-        mat4s model;
-
-        vec4s baseColourFactor;
-        vec4s metallicRoughnessOcclusionFactor;
-        vec3s scale;
-        vec3s emissiveFactor;
-        
-        float alphaCutoff;
-
-        BufferHandle vertexBuffer;
-        BufferHandle indexBuffer;
-        BufferHandle materialBuffer;
-
-        uint32_t indexOffset;
-
-        uint32_t count;
-        uint32_t flags;
-
-        VkIndexType indexType;
-
-        DescriptorSetHandle descriptorSet;
-
-        //Indices used for bindless textures.
-        uint16_t diffuseTextureIndex;
-        uint16_t roughnessTextureIndex;
-        uint16_t normalTextureIndex;
-        uint16_t occlusionTextureIndex;
-        uint16_t emisiveTextureIndex;
+        vec3s testColour;
+        uint32_t skyboxTextureIndex;
     };
 
     struct UniformData
     {
-        mat4s globalModel;
         mat4s viewPerspective;
+        mat4s globalModel;
         vec4s eye;
         vec4s light;
     };
 
-    struct Transform
-    {
-        vec3s scale;
-        vec3s translation;
-        versors rotation;
-
-        void reset()
-        {
-            scale = vec3s{ 1.f, 1.f, 1.f };
-            rotation = glms_quat_identity();
-            translation = vec3s{ 1.f, 1.f, 1.f };
-        }
-
-        mat4s calculateMatrix() const
-        {
-            const mat4s translationMatrix = glms_translate_make(translation);
-            const mat4s scaleMatrix = glms_scale_make(scale);
-            const mat4s localMatrix = glms_mat4_mul(glms_mat4_mul(translationMatrix, glms_quat_mat4(rotation)), scaleMatrix);
-
-            return localMatrix;
-        }
-    };
-
     struct PushConstants
     {
-        VkDeviceAddress modelPositionAddress;
         VkDeviceAddress vertexDataAddress;
+        VkDeviceAddress modelPositionAddress;
         uint32_t index;
     };
 
@@ -158,8 +73,8 @@ namespace
         meshData.textures[2] = meshDraw.normalTextureIndex;
         meshData.textures[3] = meshDraw.occlusionTextureIndex;
 
-        meshData.emissiveFactor = 
-        { 
+        meshData.emissiveFactor =
+        {
             meshDraw.emissiveFactor.x,
             meshDraw.emissiveFactor.y,
             meshDraw.emissiveFactor.z
@@ -179,16 +94,50 @@ namespace
     }
 
     static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
+
+    //TODO: Move this to a place that make sense.
+    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, const char* name)
+    {
+        Array<uint8_t*> skyboxImageArray;
+        skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
+        int comp;
+        int width;
+        int height;
+
+        for (uint32_t i = 0; i < images.size; ++i)
+        {
+            if (images[i])
+            {
+                //Load 6 images.
+                uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 4);
+                if (imageData == nullptr)
+                {
+                    VOID_ERROR("Error loading texture %s", images[i]);
+                    return INVALID_TEXTURE;
+                }
+
+                skyboxImageArray.push(imageData);
+                free(imageData);
+            }
+        }
+
+        //Create the single texture.
+        TextureCreation creation{};
+        creation.setData(skyboxImageArray.data)
+            .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
+            .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+            .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(width), 1)
+            .setName(name);
+        creation.layerCount = 6;
+        TextureHandle newTexture = gpu.createTexture(creation);
+
+        skyboxImageArray.shutdown();
+        return newTexture;
+    }
 }
 
 int main(int argc, char** argv)
 {
-    if (argc < 2)
-    {
-        vprint("Setting the Sponza GLTF model.\n");
-        InjectDefault3DModel();
-    }
-
     //Init services
     MemoryService::instance()->init(void_giga(1ull), void_mega(8));
     timeServiceInit();
@@ -209,15 +158,8 @@ int main(int argc, char** argv)
     GPUDevice gpu;
     gpu.init(deviceCreation);
 
-    ResourceManager resourceManager;
-    resourceManager.init(allocator);
-
     GPUProfiler gpuProfiler;
     gpuProfiler.init(allocator, 100);
-
-    Renderer renderer;
-    renderer.init({ &gpu, allocator });
-    renderer.setLoaders(&resourceManager);
 
     ImguiService* imgui = ImguiService::instance();
     ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
@@ -225,618 +167,179 @@ int main(int argc, char** argv)
 
     //Window::instance()->setFullscreen(true);
 
-    Directory cwd{};
-    directoryCurrent(&cwd);
+    //Create pipeline state
+    PipelineCreation pipelineCreation;
+
+    //Depth
+    pipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+    //Shader state
+    FileReadResult vertexShaderCode = fileReadBinary("Assets/Shaders/coreShader.vert.spv", &MemoryService::instance()->scratchAllocator);
+    FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/coreShader.frag.spv", &MemoryService::instance()->scratchAllocator);
+
+    pipelineCreation.shaders.setName("Cube")
+        .addStage(vertexShaderCode.data, uint32_t(vertexShaderCode.size), VK_SHADER_STAGE_VERTEX_BIT)
+        .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
+        .setSPVInput(true);
+
+    //Descriptor set layout.
+    DescriptorSetLayoutCreation cubeRLLCreation{};
+    cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
+        .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
+        .setSetIndex(0);
+    cubeRLLCreation.bindless = false;
+
+    //Setting it into pipeline.
+    //This descriptor set layout will be ran every draw calls
+    mainDescriptorSetLayout = gpu.createDescriptorSetLayout(cubeRLLCreation);
+    //This descriptor set layout will be ran every frame
+    pipelineCreation.addDescriptorSetLayout(mainDescriptorSetLayout)
+        .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
+
+    cubePipeline = gpu.createPipeline(pipelineCreation);
+
+    //Depth
+    PipelineCreation skyboxPipelineCreation{};
+    skyboxPipelineCreation.depthStencil.depthEnable = false;
+
+    //Shader state
+    FileReadResult vertSkybox = fileReadBinary("Assets/Shaders/skybox.vert.spv", &MemoryService::instance()->scratchAllocator);
+    FileReadResult fragSkybox = fileReadBinary("Assets/Shaders/skybox.frag.spv", &MemoryService::instance()->scratchAllocator);
+
+    skyboxPipelineCreation.shaders.setName("skybox")
+        .addStage(vertSkybox.data, uint32_t(vertSkybox.size), VK_SHADER_STAGE_VERTEX_BIT)
+        .addStage(fragSkybox.data, uint32_t(fragSkybox.size), VK_SHADER_STAGE_FRAGMENT_BIT)
+        .setSPVInput(true);
+
+    //Descriptor set layout.
+    DescriptorSetLayoutCreation skyboxSetLayout{};
+    skyboxSetLayout.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
+        .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "SkyboxMaterial" })
+        .setSetIndex(0);
+    skyboxSetLayout.bindless = false;
+
+    //Setting it into pipeline.
+    //This descriptor set layout will be ran every draw calls
+    skyboxDescriptorSetLayout = gpu.createDescriptorSetLayout(skyboxSetLayout);
+    //This descriptor set layout will be ran every frame
+    skyboxPipelineCreation.addDescriptorSetLayout(skyboxDescriptorSetLayout)
+        .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
+
+    skyboxPipeline = gpu.createPipeline(skyboxPipelineCreation);
+
+    //Debug renderer
+    PipelineCreation debugPipelineCreation{};
+    debugPipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    //debugPipelineCreation.depthStencil.depthEnable = false;
+
+    //Shader state
+    FileReadResult vertDebug = fileReadBinary("Assets/Shaders/debugRendering.vert.spv", &MemoryService::instance()->scratchAllocator);
+    FileReadResult fragDebug = fileReadBinary("Assets/Shaders/debugRendering.frag.spv", &MemoryService::instance()->scratchAllocator);
+
+    debugPipelineCreation.shaders.setName("debugRenderer")
+        .addStage(vertDebug.data, uint32_t(vertDebug.size), VK_SHADER_STAGE_VERTEX_BIT)
+        .addStage(fragDebug.data, uint32_t(fragDebug.size), VK_SHADER_STAGE_FRAGMENT_BIT)
+        .setSPVInput(true);
+
+    debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ false);
+
+    //Constant buffer
+    BufferCreation uniformBufferCreation;
+    uniformBufferCreation.reset()
+        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
+        .setName("sceneBuffer");
+    sceneBuffer = gpu.createBuffer(uniformBufferCreation);
+
+    Array<const char*> cubemapsImage;
+    cubemapsImage.init(allocator, 6);
+    cubemapsImage.push("Assets/Textures/1.png");
+    cubemapsImage.push("Assets/Textures/2.png");
+    cubemapsImage.push("Assets/Textures/3.png");
+    cubemapsImage.push("Assets/Textures/4.png");
+    cubemapsImage.push("Assets/Textures/5.png");
+    cubemapsImage.push("Assets/Textures/6.png");
+
+    TextureHandle skyboxTextureHandle = createACubemap(gpu, cubemapsImage, "SpaceCubeMap");
+    SamplerCreation skyboxSamplerCreation{};
+    skyboxSamplerCreation.minFilter = VK_FILTER_LINEAR;
+    skyboxSamplerCreation.magFilter = VK_FILTER_LINEAR;
+    skyboxSamplerCreation.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    skyboxSamplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    skyboxSamplerCreation.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    SamplerHandle skyboxSampler = gpu.createSampler(skyboxSamplerCreation);
+    gpu.linkTextureSampler(skyboxTextureHandle, skyboxSampler);
 
-    char GLTFBasePath[512]{};
-    memcpy(GLTFBasePath, argv[1], strlen(argv[1]));
-    fileDirectoryFromPath(GLTFBasePath);
+    cubemapsImage.shutdown();
 
-    directoryChange(GLTFBasePath);
+    // Register allocation hook. In this example we'll just let Jolt use malloc / free but you can override these if you want (see Memory.h).
+    // This needs to be done before any other Jolt function is called.
+    JPH::RegisterDefaultAllocator();
 
-    char GLTFFile[512]{};
-    memcpy(GLTFFile, argv[1], strlen(argv[1]));
-    fileNameFromPath(GLTFFile);
+    Physics physics;
+    physics.initPhysics();
 
-    cgltf_data* cgltfData = nullptr;
+    Scene scene;
+    scene.initScene(allocator, gpu, sceneBuffer, mainDescriptorSetLayout);
+    scene.buildScene(physics);
 
-    cgltf_options options{};
-    options.memory.alloc_func = tlsf_malloc;
-    options.memory.free_func = tlsf_free;
-    options.memory.user_data = allocator->TLSFHandle;
-    cgltf_result result = cgltf_parse_file(&options, GLTFFile, &cgltfData);
-    if (result != cgltf_result_success)
-    {
-        VOID_ERROR("File could not be found or loaded.");
-    }
-
-    result = cgltf_load_buffers(&options, cgltfData, GLTFFile);
-    if (result != cgltf_result_success)
-    {
-        VOID_ERROR("Could not load buffers from the gltf mdoel");
-    }
-
-    result = cgltf_validate(cgltfData);
-    if (result != cgltf_result_success)
-    {
-        VOID_ERROR("The gltf model is invalid");
-    }
-
-    Array<TextureResource> images;
-    images.init(allocator, uint32_t(cgltfData->images_count));
-
-    //GLB version.
-    for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
-    {
-        cgltf_image image = cgltfData->images[imageIndex];
-
-        if (image.uri != nullptr)
-        {
-            TextureResource* textureResource = renderer.createTexture(image.uri, image.uri);
-
-            VOID_ASSERT(textureResource != nullptr);
-
-            images.push(*textureResource);
-        }
-        else
-        {
-            int comp = 0;
-            int width = 0;
-            int height = 0;
-            uint8_t mipLevels = 1;
-
-            uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
-            stbi_info_from_memory(rawBufferData, int(image.buffer_view->size), &width, &height, &comp);
-
-            //TODO: Add mipmap support later.
-            uint32_t w = width;
-            uint32_t h = height;
-
-            while (w > 1 && h > 1)
-            {
-                w /= 2;
-                h /= 2;
-
-                ++mipLevels;
-            }
-
-            int x;
-            int y;
-            uint8_t* textureData = stbi_load_from_memory(rawBufferData, int(image.buffer_view->size), &x, &y, &comp, 4);
-
-            TextureCreation textureCreation{};
-            textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-                .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
-                .setData(textureData)
-                .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                .setName(nullptr);
-
-            TextureResource* textureResource = renderer.createTexture(textureCreation);
-            VOID_ASSERT(textureResource != nullptr);
-
-            images.push(*textureResource);
-
-            stbi_image_free(textureData);
-        }
-    }
-
-    //NOTE: resource working directory
-    directoryChange(cwd.path);
-
-    SamplerCreation samplerCreation{};
-    samplerCreation.minFilter = VK_FILTER_LINEAR;
-    samplerCreation.magFilter = VK_FILTER_LINEAR;
-    samplerCreation.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    SamplerHandle dummySampler = gpu.createSampler(samplerCreation);
-
-    StringBuffer resourceNameBuffer;
-    resourceNameBuffer.init(void_kilo(64), allocator);
-
-    Array<SamplerResource> samplers;
-    samplers.init(allocator, uint32_t(cgltfData->samplers_count));
-
-    for (uint32_t samplerIndex = 0; samplerIndex < cgltfData->samplers_count; ++samplerIndex)
-    {
-        cgltf_sampler sampler = cgltfData->samplers[samplerIndex];
-
-        char* samplerName = resourceNameBuffer.appendUseF("Sampler_%u", samplerIndex);
-
-        SamplerCreation creation;
-        creation.minFilter = sampler.min_filter == cgltf_filter_type_linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-        creation.magFilter = sampler.mag_filter == cgltf_filter_type_linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-        creation.name = samplerName;
-
-        SamplerResource* samplerResource = renderer.createSampler(creation);
-        VOID_ASSERT(samplerResource != nullptr);
-
-        samplers.push(*samplerResource);
-    }
-
-    //NOTE: resource working directory
-    directoryChange(cwd.path);
-
-    Array<MeshDraw> meshDraws;
-    meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
-
-    cgltf_component_type componentType = cgltf_component_type_max_enum;
-    Array<Vertices> vertices;
-    vertices.init(allocator, 256);
-
-    BufferHandle currentIndexBuffer = INVALID_BUFFER;
-    {
-        //Create pipeline state
-        PipelineCreation pipelineCreation;
-
-        //Depth
-        pipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
-        //Shader state
-        FileReadResult vertexShaderCode = fileReadBinary("Assets/Shaders/coreShader.vert.spv", &MemoryService::instance()->scratchAllocator);
-        FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/coreShader.frag.spv", &MemoryService::instance()->scratchAllocator);
-
-        pipelineCreation.shaders.setName("Cube")
-            .addStage(vertexShaderCode.data, uint32_t(vertexShaderCode.size), VK_SHADER_STAGE_VERTEX_BIT)
-            .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
-            .setSPVInput(true);
-
-        //Descriptor set layout.
-        DescriptorSetLayoutCreation cubeRLLCreation{};
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
-                       .setSetIndex(0);
-        cubeRLLCreation.bindless = false;
-
-        //Setting it into pipeline.
-        //This descriptor set layout will be ran every draw calls
-        cubeDSL = gpu.createDescriptorSetLayout(cubeRLLCreation);
-        //This descriptor set layout will be ran every frame
-        pipelineCreation.addDescriptorSetLayout(cubeDSL)
-            .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
-
-        cubePipeline = gpu.createPipeline(pipelineCreation);
-
-        //Constant buffer
-        BufferCreation uniformBufferCreation;
-        uniformBufferCreation.reset()
-            .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
-            .setName("cubeCB");
-        cubeCB = gpu.createBuffer(uniformBufferCreation);
-
-        //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
-        Array<int32_t> nodeParents;
-        nodeParents.init(allocator, cgltfData->nodes_count);
-        Array<cgltf_node> nodeStack;
-        nodeStack.init(allocator, cgltfData->nodes_count);
-
-        Array<mat4s> nodeMatrix;
-        nodeMatrix.init(allocator, cgltfData->nodes_count);
-
-        //Adding all the root nodes to the array.
-        for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
-        {
-            cgltf_scene cgltfscene = cgltfData->scenes[sceneIndex];
-            for (uint32_t parentIndex = 0; parentIndex < cgltfscene.nodes_count; ++parentIndex)
-            {
-                cgltf_node* parentNode = cgltfscene.nodes[parentIndex];
-                nodeParents.push(-1);
-                nodeStack.push(*parentNode);
-            }
-        }
-
-        mat4s finalMatrix = glms_mat4_identity();
-        for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
-        {
-            for (uint32_t nodeIndex = 0; nodeIndex < cgltfData->nodes_count; ++nodeIndex)
-            {
-                cgltf_node currentNode = nodeStack[nodeIndex];
-
-                mat4s localMatrix = glms_mat4_identity();
-
-                if (currentNode.has_matrix)
-                {
-                    //CGLM and glTF have the same matrix layout, just memcpy it.
-                    memcpy(&localMatrix, currentNode.matrix, sizeof(mat4s));
-                }
-                else
-                {
-                    vec3s nodeScale = { 1.f, 1.f, 1.f };
-                    if (currentNode.has_scale)
-                    {
-                        nodeScale = vec3s{ currentNode.scale[0], currentNode.scale[1], currentNode.scale[2] };
-                    }
-
-                    vec3s nodeTranslation = { 0.f, 0.f, 0.f };
-                    if (currentNode.has_translation)
-                    {
-                        nodeTranslation = vec3s{ currentNode.translation[0], currentNode.translation[1], currentNode.translation[2] };
-                    }
-
-                    //Rotation is written as a plain quaterion.
-                    versors nodeRotation = glms_quat_identity();
-                    if (currentNode.has_rotation)
-                    {
-                        nodeRotation = glms_quat_init(currentNode.rotation[0], currentNode.rotation[1], currentNode.rotation[2], currentNode.rotation[3]);
-                    }
-
-                    Transform transform;
-                    transform.reset();
-                    transform.translation = nodeTranslation;
-                    transform.scale = nodeScale;
-                    transform.rotation = nodeRotation;
-
-                    localMatrix = transform.calculateMatrix();
-                }
-
-                nodeMatrix.push(localMatrix);
-
-                if (currentNode.children != nullptr && currentNode.children[0] != nullptr)
-                {
-                    for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
-                    {
-                        if (currentNode.children[childIndex] != nullptr)
-                        {
-                            cgltf_node childNode = *currentNode.children[childIndex];
-                            nodeStack.push(childNode);
-                        }
-                        nodeParents.push(nodeIndex);
-                    }
-                }
-
-                finalMatrix = localMatrix;
-                int32_t parentNodeIndex = nodeParents[nodeIndex];
-                while (parentNodeIndex != -1)
-                {
-                    finalMatrix = glms_mat4_mul(nodeMatrix[parentNodeIndex], finalMatrix);
-                    parentNodeIndex = nodeParents[parentNodeIndex];
-                }
-
-                cgltf_mesh* mesh = nodeStack[nodeIndex].mesh;
-                if (mesh == nullptr)
-                {
-                    continue;
-                }
-
-                //Final SRT composition
-                for (uint32_t primitiveIndex = 0; primitiveIndex < (uint32_t)mesh->primitives_count; ++primitiveIndex)
-                {
-                    MeshDraw meshDraw{};
-
-                    meshDraw.model = finalMatrix;
-
-                    cgltf_primitive meshPrimitive = mesh->primitives[primitiveIndex];
-
-                    //We are now correctly parsing indices. We always expect with the cgltf_accessor_unpack_indices that the index offset to 0.
-                    meshDraw.indexOffset = 0;
-                    uint32_t indexCount = uint32_t(meshPrimitive.indices->count);
-                    meshDraw.count = indexCount;
-                    componentType = meshPrimitive.indices->component_type;
-
-                    size_t stackPrimitveMarker = scratchAllocator.getMarker();
-
-                    uint32_t indexCompenentSize = (uint32_t)cgltf_component_size(meshPrimitive.indices->component_type);
-                    Array<uint32_t> indices;
-                    indices.init(&scratchAllocator, indexCount, indexCount);
-                    cgltf_accessor_unpack_indices(meshPrimitive.indices, indices.data, indexCompenentSize, indices.size);
-
-                    BufferCreation bufferCreation{};
-                    bufferCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, uint32_t(indices.size * meshPrimitive.indices->stride))
-                        .setName("indices")
-                        .setData(indices.data);
-                    currentIndexBuffer = gpu.createBuffer(bufferCreation);
-
-                    meshDraw.indexBuffer = currentIndexBuffer;
-
-                    cgltf_material* material = meshPrimitive.material;
-                    VOID_ASSERTM(material != nullptr, "The model mesh materials can't be null.\n");
-
-                    //Descriptor set
-                    DescriptorSetCreation dsCreation{};
-                    dsCreation.buffer(cubeCB, 0);
-
-                    bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(MaterialData))
-                        .setName("material");
-                    meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
-                    dsCreation.buffer(meshDraw.materialBuffer, 1)
-                        .setLayout(cubeDSL);
-
-                    meshDraw.alphaCutoff = material->alpha_cutoff != FLT_MAX ? material->alpha_cutoff : 1.f;
-
-                    if (material->has_pbr_metallic_roughness)
-                    {
-                        meshDraw.baseColourFactor.x = material->pbr_metallic_roughness.base_color_factor[0];
-                        meshDraw.baseColourFactor.y = material->pbr_metallic_roughness.base_color_factor[1];
-                        meshDraw.baseColourFactor.z = material->pbr_metallic_roughness.base_color_factor[2];
-                        meshDraw.baseColourFactor.w = material->pbr_metallic_roughness.base_color_factor[3];
-
-                        meshDraw.metallicRoughnessOcclusionFactor.x = material->pbr_metallic_roughness.metallic_factor != FLT_MAX ? material->pbr_metallic_roughness.metallic_factor : 1.f;
-                        meshDraw.metallicRoughnessOcclusionFactor.y = material->pbr_metallic_roughness.roughness_factor != FLT_MAX ? material->pbr_metallic_roughness.roughness_factor : 1.f;
-
-                        if (material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
-                        {
-                            cgltf_texture* textureInfo = material->pbr_metallic_roughness.base_color_texture.texture;
-                            SamplerHandle samplerHandle = dummySampler;
-
-                            uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                            TextureResource& textureGPU = images[imageIndex];
-
-                            if (textureInfo->sampler)
-                            {
-                                uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                                SamplerResource& samplerGPU = samplers[sampleIndex];
-                                gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                                samplerHandle = samplerGPU.handle;
-                            }
-
-                            meshDraw.diffuseTextureIndex = (uint16_t)textureGPU.handle.index;
-                        }
-                        else
-                        {
-                            meshDraw.diffuseTextureIndex = UINT16_MAX;
-                        }
-
-                        if (material->pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr)
-                        {
-                            cgltf_texture* textureInfo = material->pbr_metallic_roughness.metallic_roughness_texture.texture;
-                            SamplerHandle samplerHandle = dummySampler;
-
-                            uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                            TextureResource& textureGPU = images[imageIndex];
-
-                            if (textureInfo->sampler)
-                            {
-                                uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                                SamplerResource& samplerGPU = samplers[sampleIndex];
-                                gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                                samplerHandle = samplerGPU.handle;
-                            }
-
-                            meshDraw.roughnessTextureIndex = (uint16_t)textureGPU.handle.index;
-                        }
-                        else
-                        {
-                            meshDraw.roughnessTextureIndex = UINT16_MAX;
-                        }
-                    }
-
-                    if (material->occlusion_texture.texture != nullptr)
-                    {
-                        cgltf_texture* textureInfo = material->occlusion_texture.texture;
-                        SamplerHandle samplerHandle = dummySampler;
-
-                        uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                        TextureResource& textureGPU = images[imageIndex];
-
-                        if (textureInfo->sampler)
-                        {
-                            uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                            SamplerResource& samplerGPU = samplers[sampleIndex];
-                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                            samplerHandle = samplerGPU.handle;
-                        }
-
-                        meshDraw.metallicRoughnessOcclusionFactor.z = material->occlusion_texture.scale !=
-                            FLT_MAX ?
-                            material->occlusion_texture.scale :
-                            1.f;
-
-                        meshDraw.occlusionTextureIndex = (uint16_t)textureGPU.handle.index;
-                    }
-                    else
-                    {
-                        meshDraw.metallicRoughnessOcclusionFactor.z = 1.f;
-                        meshDraw.occlusionTextureIndex = UINT16_MAX;
-                    }
-
-                    if (material->emissive_texture.texture != nullptr)
-                    {
-                        cgltf_texture* textureInfo = material->emissive_texture.texture;
-                        SamplerHandle samplerHandle = dummySampler;
-
-                        uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                        TextureResource& textureGPU = images[imageIndex];
-
-                        if (textureInfo->sampler)
-                        {
-                            uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                            SamplerResource& samplerGPU = samplers[sampleIndex];
-                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                            samplerHandle = samplerGPU.handle;
-                        }
-
-                        meshDraw.emisiveTextureIndex = (uint16_t)textureGPU.handle.index;
-
-                        //TODO: Is this always tide to the emissive texture?
-                        meshDraw.emissiveFactor = vec3s
-                        {
-                            material->emissive_factor[0],
-                            material->emissive_factor[1],
-                            material->emissive_factor[2]
-                        };
-                    }
-                    else
-                    {
-                        meshDraw.emisiveTextureIndex = UINT16_MAX;
-                    }
-
-                    if (material->normal_texture.texture != nullptr)
-                    {
-                        cgltf_texture* textureInfo = material->normal_texture.texture;
-                        SamplerHandle samplerHandle = dummySampler;
-
-                        uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                        TextureResource& textureGPU = images[imageIndex];
-
-                        if (textureInfo->sampler)
-                        {
-                            uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                            SamplerResource& samplerGPU = samplers[sampleIndex];
-                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                            samplerHandle = samplerGPU.handle;
-                        }
-
-                        meshDraw.normalTextureIndex = (uint16_t)textureGPU.handle.index;
-                    }
-                    else
-                    {
-                        meshDraw.normalTextureIndex = UINT16_MAX;
-                    }
-
-                    const cgltf_accessor* positionAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_position, 0);
-                    const cgltf_accessor* normalAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_normal, 0);
-                    const cgltf_accessor* tangentAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_tangent, 0);
-                    const cgltf_accessor* textureAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_texcoord, 0);
-
-                    uint32_t vertexCount = uint32_t(positionAccessor->count);
-                    Array<Vertices> vertex;
-                    vertex.init(&scratchAllocator, vertexCount, vertexCount);
-                    if (positionAccessor)
-                    {
-                        Array<float> scratch;
-                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(positionAccessor->type);
-                        scratch.init(&scratchAllocator, vertexCount * accessFloatSize, vertexCount * accessFloatSize);
-                        VOID_ASSERT(cgltf_num_components(positionAccessor->type) == 3);
-                        cgltf_accessor_unpack_floats(positionAccessor, scratch.data, positionAccessor->count * accessFloatSize);
-
-                        for (uint32_t j = 0; j < vertexCount; ++j)
-                        {
-                            vertex[j].position[0] = scratch[j * 3 + 0];
-                            vertex[j].position[1] = scratch[j * 3 + 1];
-                            vertex[j].position[2] = scratch[j * 3 + 2];
-                        }
-                    }
-                    else
-                    {
-                        VOID_ERROR("No position data found.");
-                        continue;
-                    }
-
-                    if (normalAccessor)
-                    {
-                        Array<float> scratch;
-                        uint32_t normalCount = (uint32_t)normalAccessor->count;
-                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(normalAccessor->type);
-                        scratch.init(&scratchAllocator, normalCount * accessFloatSize, normalCount * accessFloatSize);
-                        VOID_ASSERT(cgltf_num_components(normalAccessor->type) == 3);
-                        cgltf_accessor_unpack_floats(normalAccessor, scratch.data, normalAccessor->count * accessFloatSize);
-
-                        for (uint32_t j = 0; j < vertexCount; ++j)
-                        {
-                            vertex[j].normals[0] = uint8_t(scratch[j * 3 + 0] * 127.f + 127.5f);
-                            vertex[j].normals[1] = uint8_t(scratch[j * 3 + 1] * 127.f + 127.5f);
-                            vertex[j].normals[2] = uint8_t(scratch[j * 3 + 2] * 127.f + 127.5f);
-                        }
-                    }
-                    else
-                    {
-                        VOID_ERROR("The model needs normals.");
-                    }
-
-                    if (tangentAccessor)
-                    {
-                        Array<float> scratch;
-                        uint32_t tangentCount = uint32_t(tangentAccessor->count);
-                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(tangentAccessor->type);
-                        scratch.init(&scratchAllocator, tangentCount * accessFloatSize, tangentCount * accessFloatSize);
-                        VOID_ASSERT(cgltf_num_components(tangentAccessor->type) == 4);
-                        cgltf_accessor_unpack_floats(tangentAccessor, scratch.data, tangentAccessor->count * accessFloatSize);
-
-                        for (uint32_t j = 0; j < vertexCount; ++j)
-                        {
-                            vertex[j].tangent[0] = uint8_t(scratch[j * 4 + 0] * 127.f + 127.5f);
-                            vertex[j].tangent[1] = uint8_t(scratch[j * 4 + 1] * 127.f + 127.5f);
-                            vertex[j].tangent[2] = uint8_t(scratch[j * 4 + 2] * 127.f + 127.5f);
-                            vertex[j].tangent[3] = uint8_t(scratch[j * 4 + 3] * 127.f + 127.5f);
-                        }
-                    }
-                    else 
-                    {
-                        VOID_ERROR("The model needs tangent.");
-                    }
-
-                    if (textureAccessor)
-                    {
-                        Array<float> scratch;
-                        uint32_t textureCount = (uint32_t)textureAccessor->count;
-                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(textureAccessor->type);
-                        scratch.init(&scratchAllocator, textureCount * accessFloatSize, textureCount * accessFloatSize);
-                        VOID_ASSERT(cgltf_num_components(textureAccessor->type) == 2);
-                        cgltf_accessor_unpack_floats(textureAccessor, scratch.data, textureAccessor->count * accessFloatSize);
-
-                        for (uint32_t j = 0; j < vertexCount; ++j)
-                        {
-                            vertex[j].texCoord0[0] = meshopt_quantizeHalf(scratch[j * 2 + 0]);
-                            vertex[j].texCoord0[1] = meshopt_quantizeHalf(scratch[j * 2 + 1]);
-                        };
-                    }
-
-                    bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(Vertices) * vertex.size)
-                        .setName("Vertices")
-                        .setData(vertex.data);
-                    meshDraw.vertexBuffer = gpu.createBindlessBuffer(bufferCreation);
-
-                    scratchAllocator.freeMarker(stackPrimitveMarker);
-
-                    meshDraw.descriptorSet = gpu.createDescriptorSet(dsCreation);
-                    meshDraws.push(meshDraw);
-                }
-            }
-        }
-
-        nodeParents.shutdown();
-        nodeStack.shutdown();
-        nodeMatrix.shutdown();
-    }
-
-    cgltf_free(cgltfData);
-
-    srand(42);
-
-    uint32_t totalDucks = 1111;
-    Array<mat4s> drawMatrices;
-    drawMatrices.init(allocator, totalDucks, totalDucks);
-    float sceneRadius = 5000.f;
-    for (uint32_t i = 0; i < totalDucks; ++i)
-    {
-        vec3s postion{};
-
-        postion.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
-        postion.y = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
-        postion.z = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
-
-        float rotx = ((float(rand()) / RAND_MAX) * 2 - 1);
-        float roty = ((float(rand()) / RAND_MAX) * 2 - 1);
-        float rotz = ((float(rand()) / RAND_MAX) * 2 - 1);
-
-        vec3s axis = glms_normalize({ rotx, roty, rotz });
-        float angle = (float(rand()) / RAND_MAX) * M_PI_4;
-
-        vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
-
-        drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
-    }
+    // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
+    // You should definitely not call this every frame or when e.g. streaming in a new level section as it is an expensive operation.
+    // Instead insert all new objects in batches instead of 1 at a time to keep the broad phase efficient.
+    physics.physicsSystem.OptimizeBroadPhase();
 
     PushConstants pushConstants{};
 
     BufferCreation bufferCreation{};
     bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(mat4s) * drawMatrices.size)
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
         .setName("othername")
-        .setData(drawMatrices.data);
+        .setData(scene.entityData.data);
     positionalBuffer = gpu.createBindlessBuffer(bufferCreation);
+
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugRendererData) * scene.totalColliders)
+        .setName("debugRenderer")
+        .setData(scene.debugRendererData.data);
+    debugRendererDataBuffer = gpu.createBindlessBuffer(bufferCreation);
+
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SkyboxData))
+        .setName("SkyboxData");
+    skyboxMaterialBuffer = gpu.createBuffer(bufferCreation);
+
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
+        .setName("skyboxUniformDescriptor");
+    skyboxUniformBuffer = gpu.createBuffer(bufferCreation);
+
+    DescriptorSetCreation dsCreation{};
+    dsCreation.buffer(skyboxUniformBuffer, 0);
+    dsCreation.buffer(skyboxMaterialBuffer, 1);
+    dsCreation.setLayout(skyboxDescriptorSetLayout);
+
+    skyboxDescriptorSet = gpu.createDescriptorSet(dsCreation);
 
     int64_t beginFrameTick = timeNow();
 
     vec3s eye = vec3s{ 0.f, 2.5f, 2.f };
 
     GameCamera gameCamera;
-    gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
+    gameCamera.internal3DCamera.initPerspective(0.01f, 5000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
     gameCamera.init(7.f, 3.0f, 0.1f);
 
     float modelScale = 0.1f;
     bool fullscreen = false;
+
+    MapBufferParameters skyboxCBMap = { .buffer = skyboxUniformBuffer, .offset = 0, .size = 0 };
+    void* skyboxCBData = gpu.mapBuffer(skyboxCBMap);
+
+    MapBufferParameters cbMap = { .buffer = sceneBuffer, .offset = 0, .size = 0 };
+    void* cbData = gpu.mapBuffer(cbMap);
+
+    MapBufferParameters skyboxMaterialMap = { .buffer = skyboxMaterialBuffer, .offset = 0, .size = 0 };
+    SkyboxData* skyboxMaterialBufferData = static_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
+
+    bool debugRenderer = true;
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -875,6 +378,12 @@ int main(int argc, char** argv)
                 gpu.resize(Window::instance()->width, Window::instance()->height);
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             }
+
+            if (inputHandler.isKeyJustReleased(Keys::KEY_1))
+            {
+                debugRenderer = !debugRenderer;
+            }
+
             //NOTE: This must be after the OS messages.
             imgui->newFrame();
 
@@ -890,7 +399,6 @@ int main(int argc, char** argv)
             }
             ImGui::End();
 
-
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
             //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
@@ -901,8 +409,8 @@ int main(int argc, char** argv)
             float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
             beginFrameTick = currentTick;
 
-            inputHandler.newFrame();
-            inputHandler.update();
+            physics.updatePhysics();
+            
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
@@ -915,14 +423,49 @@ int main(int argc, char** argv)
             gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
             gpuCommands->beginRendering();
+
+            //Skybox!
+            gpuCommands->bindPipeline(skyboxPipeline);
+            gpuCommands->setScissor(nullptr);
+            gpuCommands->setViewport(nullptr);
+
+            //Update the perspective matrix for the skybox.
+            if (skyboxCBData)
+            {
+                //TODO: Match these name with what's in the shader.
+                UniformData uniformData{};
+                uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+                //It needs to have no translation.
+                uniformData.viewPerspective.m30 = 0;
+                uniformData.viewPerspective.m31 = 0;
+                uniformData.viewPerspective.m32 = 0;
+                uniformData.viewPerspective.m33 = 1;
+                memcpy(skyboxCBData, &uniformData, sizeof(UniformData));
+            }
+
+            //Maybe we can make this non-dymanic after things are working?
+            if (skyboxMaterialBufferData)
+            {
+                SkyboxData skyboxData{};
+                skyboxData.skyboxTextureIndex = skyboxTextureHandle.index;
+                skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
+                memcpy(skyboxMaterialBufferData, &skyboxData, sizeof(SkyboxData));
+            }
+
+            gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
+            gpuCommands->bindlessDescriptorSet(1);
+
+            gpuCommands->draw(36, 1, 0, 0);
+
+            //Scene
             gpuCommands->bindPipeline(cubePipeline);
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
 
-            mat4s globalModel{};
+            gpuCommands->bindlessDescriptorSet(1);
+
             //Update rotating cube data.
-            MapBufferParameters cbMap = { cubeCB, 0, 0 };
-            void* cbData = gpu.mapBuffer(cbMap);
+            mat4s globalModel{};
             if (cbData)
             {
                 globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
@@ -931,28 +474,38 @@ int main(int argc, char** argv)
                 UniformData uniformData{};
                 uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
                 uniformData.globalModel = globalModel;
-                //eye not used in shader.
-                
-                uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f};
+                uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
                 uniformData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
                 memcpy(cbData, &uniformData, sizeof(UniformData));
-
-                gpu.unmapBuffer(cbMap);
             }
 
-            gpuCommands->bindlessDescriptorSet(1);
+            Buffer* positionBuff = gpu.accessBuffer(positionalBuffer);
+            pushConstants.modelPositionAddress = positionBuff->bufferAddress;
 
-            for (uint32_t i = 0; i < totalDucks; ++i)
+            uint32_t physicsMarker = scratchAllocator.getMarker();
+            Array<EntityData> physicsUpdateDataArray;
+            physicsUpdateDataArray.init(&scratchAllocator, 4);
+
+            for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
             {
-                Buffer* positionBuf = gpu.accessBuffer(positionalBuffer);
+                const Entity& entity = scene.entities[entityIndex];
+                pushConstants.index = entityIndex;
 
-                pushConstants.modelPositionAddress = positionBuf->bufferAddress;
-                pushConstants.index = i;
-
-                for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
+                if (entity.debugRendererIndex != UINT32_MAX)
                 {
-                    MeshDraw meshDraw = meshDraws[meshIndex];
+                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
+
+                    EntityData physicsPosition{};
+                    physicsPosition.pos = convertToMat4(newPos);
+                    physicsPosition.colour = scene.entityData[entityIndex].colour;
+
+                    physicsUpdateDataArray.push(physicsPosition);
+                }
+
+                for (uint32_t meshIndex = 0; meshIndex < scene.models[entity.modelIndex].meshDraws.size; ++meshIndex)
+                {
+                    MeshDraw meshDraw = scene.models[entity.modelIndex].meshDraws[meshIndex];
 
                     MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
                     MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
@@ -965,14 +518,67 @@ int main(int argc, char** argv)
 
                     vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-                    //gpuCommands->bindIndexBuffer(indexBufferHandle, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
-                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
 
                     gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
                 }
             }
+            
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
+            scratchAllocator.freeMarker(physicsMarker);
 
+            if (debugRenderer)
+            {
+                //Debug
+                gpuCommands->bindPipeline(debugPipeline);
+                gpuCommands->setScissor(nullptr);
+                gpuCommands->setViewport(nullptr);
+
+                uint32_t debugRendererMarker = scratchAllocator.getMarker();
+
+                Array<DebugRendererData> debugRenderingDataArray;
+                debugRenderingDataArray.init(&scratchAllocator, 4);
+
+                Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer);
+                pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
+                for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
+                {
+                    const Entity& entity = scene.entities[entityIndex];
+                    if (entity.debugRendererIndex != UINT32_MAX)
+                    {
+                        globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
+
+                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
+                        
+                        DebugRendererData debugRenderData{};
+                        debugRenderData.position = convertToMat4(newPos);
+                        debugRenderData.globalModel = globalModel;
+                        debugRenderData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+                        debugRenderData.model = scene.debugRendererData[entityIndex].model;
+                        debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
+
+                        pushConstants.index = entity.positionIndex;
+                        VOID_ASSERTM(scene.models[entity.modelIndex].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
+
+                        MeshDraw meshDraw = scene.models[scene.debugSphereIndex].meshDraws[0];
+
+                        Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
+                        pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+
+                        vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+                        gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+
+                        gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+
+                        debugRenderingDataArray.push(debugRenderData);
+                    }
+                }
+
+                vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
+                scratchAllocator.freeMarker(debugRendererMarker);
+            }
             imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
@@ -992,49 +598,36 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
+    //gpu.unmapBuffer(debugRendererDataMap);
+    //gpu.unmapBuffer(positionMap);
+    gpu.unmapBuffer(cbMap);
+    gpu.unmapBuffer(skyboxMaterialMap);
+    gpu.unmapBuffer(skyboxCBMap);
+
     gpu.destroyBuffer(positionalBuffer);
 
-    drawMatrices.shutdown();
+    gpu.destroyDescriptorSet(skyboxDescriptorSet);
+    gpu.destroyBuffer(skyboxMaterialBuffer);
+    gpu.destroyBuffer(skyboxUniformBuffer);
+    gpu.destroyBuffer(debugRendererDataBuffer);
 
-    for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
-    {
-        MeshDraw& meshDraw = meshDraws[meshIndex];
-        gpu.destroyDescriptorSet(meshDraw.descriptorSet);
-        gpu.destroyBuffer(meshDraw.materialBuffer);
-        gpu.destroyBuffer(meshDraw.vertexBuffer);
-        gpu.destroyBuffer(meshDraw.indexBuffer);
-    }
+    scene.shutdownScene(gpu, physics);
 
-    gpu.destroySampler(dummySampler);
+    gpu.destroySampler(skyboxSampler);
+    gpu.destroyTexture(skyboxTextureHandle);
 
-    meshDraws.shutdown();
-
-    gpu.destroyBuffer(cubeCB);
-    gpu.destroyDescriptorSetLayout(cubeDSL);
+    gpu.destroyBuffer(sceneBuffer);
+    gpu.destroyDescriptorSetLayout(mainDescriptorSetLayout);
+    gpu.destroyDescriptorSetLayout(skyboxDescriptorSetLayout);
     gpu.destroyPipeline(cubePipeline);
+    gpu.destroyPipeline(skyboxPipeline);
+    gpu.destroyPipeline(debugPipeline);
 
     imgui->shutdown();
 
     gpuProfiler.shutdown();
-    resourceManager.shutdown();
 
-    for (uint32_t i = 0; i < images.size; ++i)
-    {
-        renderer.destroyTexture(&images[i]);
-    }
-
-    for (uint32_t i = 0; i < samplers.size; ++i)
-    {
-        renderer.destroySampler(&samplers[i]);
-    }
-
-    renderer.shutdown();
-
-    vertices.shutdown();
-    samplers.shutdown();
-    images.shutdown();
-
-    resourceNameBuffer.shutdown();
+    gpu.shutdown();
 
     inputHandler.shutdown();
     Window::instance()->shutdown();

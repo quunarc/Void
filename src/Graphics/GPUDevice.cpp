@@ -75,7 +75,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 #endif // _WIN32
 
 #if defined(_MSC_VER)
-        __debugbreak();
+        if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        {
+            __debugbreak();
+        }
 #elif defined(__LINUX__)
         std::raise(SIGINT);
 #endif
@@ -205,15 +208,15 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         //Create the image
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.flags = creation.layerCount == 1 ? 0 : VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
         imageInfo.format = texture->vkFormat;
         imageInfo.usage = texture->usage;
-        imageInfo.flags = 0;
         imageInfo.imageType = texture->imageType;
-        imageInfo.extent.width = creation.width;
+        imageInfo.extent.width  = creation.width;
         imageInfo.extent.height = creation.height;
         imageInfo.extent.depth = creation.depth;
         imageInfo.mipLevels = creation.mipmaps;
-        imageInfo.arrayLayers = 1;
+        imageInfo.arrayLayers = creation.layerCount;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -244,7 +247,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         }
 
         info.subresourceRange.levelCount = 1;
-        info.subresourceRange.layerCount = 1;
+        info.subresourceRange.layerCount = creation.layerCount;
         check(vkCreateImageView(gpu.vulkanDevice, &info, gpu.vulkanAllocationCallbacks, &texture->vkImageView));
 
         gpu.setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)(texture->vkImageView), creation.name);
@@ -671,7 +674,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     applicationInfo.pApplicationName = "Void Game";
     applicationInfo.applicationVersion = 1;
     applicationInfo.pEngineName = "Void Engine";
-    applicationInfo.apiVersion = VK_MAKE_VERSION(1, 3, 0);
+    applicationInfo.apiVersion = VK_MAKE_VERSION(1, 4, 0);
 
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -740,6 +743,7 @@ vprint("Instance created.\n");
     {
         PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT =
             (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vulkanInstance, "vkCreateDebugUtilsMessengerEXT");
+
         VkDebugUtilsMessengerCreateInfoEXT debugMessenegerCreateInfo = createDebugUtilsMessengerInfo();
 
         vkCreateDebugUtilsMessengerEXT(vulkanInstance, &debugMessenegerCreateInfo, vulkanAllocationCallbacks, &vulkanDebugUtilsMessenger);
@@ -1067,7 +1071,6 @@ vprint("Instance created.\n");
     fullscreenBufferVbCreation.name = "FullscreenVB";
     fullscreenVertexBuffer = createBuffer(fullscreenBufferVbCreation);
 
-    vprint("TODO: Move this transition.\n");
     //Create depth image
     TextureCreation depthTextureCreation{};
     depthTextureCreation.initialData = nullptr;
@@ -1082,28 +1085,7 @@ vprint("Instance created.\n");
     depthTextureCreation.name = "DepthImage_Texture";
     depthTexture = createTexture(depthTextureCreation);
 
-    Texture* depthTex = accessTexture(depthTexture);
-
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    CommandBuffer* commandBuffer = getInstantCommandBuffer();
-    vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
-
-    transitionImageLayout(commandBuffer->vkCommandBuffer, depthTex->vkImage, depthTex->vkFormat,
-                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
-
-    vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
-
-    //Submit command buffer
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
-
-    vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(vulkanQueue);
+    transitionDepthImage(depthTexture);
 
     dymanicRenderingData.depth(VK_FORMAT_D32_SFLOAT);
 
@@ -1158,18 +1140,6 @@ void GPUDevice::shutdown()
     framesInFlight.shutdown();
 
     gpuTimestampManager->shutdown();
-
-    destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
-    destroyDescriptorSet(bindlessDescriptorSetHandle);
-
-    //Memory: this contains allocation for GPU timestamp memory, queued command buffers and render frames.
-    void_free(gpuTimestampManager, allocator);
-
-    destroyTexture(depthTexture);
-    destroyBuffer(fullscreenVertexBuffer);
-    destroyTexture(dummyTexture);
-    destroySampler(defaultSampler);
-
     //Add pending bindless textures to delete.
     for (uint32_t i = 0; i < textureToUpdateBindless.size; ++i)
     {
@@ -1177,13 +1147,24 @@ void GPUDevice::shutdown()
         destroyTextureInstant(update.handle);
     }
 
+    destroySampler(defaultSampler);
+    destroyBuffer(fullscreenVertexBuffer);
+    destroyTexture(dummyTexture);
+    destroyTexture(depthTexture);
+
+    destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
+    destroyDescriptorSet(bindlessDescriptorSetHandle);
+
+    //Memory: this contains allocation for GPU timestamp memory, queued command buffers and render frames.
+    void_free(gpuTimestampManager, allocator);
+
     //Destroy all pending resources.
     for (uint32_t i = 0; i < resourceDeletionQueue.size; ++i)
     {
         ResourceUpdate& resourceDeletion = resourceDeletionQueue[i];
 
         //Skip just freed resources.
-        if (resourceDeletion.currentFrame == UINT_MAX)
+        if (resourceDeletion.currentFrame == UINT32_MAX)
         {
             continue;
         }
@@ -1276,7 +1257,7 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
     VmaAllocationCreateInfo memoryInfo{};
-    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
     VmaAllocationInfo allocationInfo{};
@@ -1287,7 +1268,7 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
 
     if (creation.initialData)
     {
-        memcpy(allocationInfo.pMappedData, creation.initialData, static_cast<size_t>(creation.size));
+        vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, buffer->vmaAllocation, 0, creation.size);
     }
 
     return handle;
@@ -1317,7 +1298,7 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
     VmaAllocationCreateInfo memoryInfo{};
-    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
     memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
     VmaAllocationInfo allocationInfo{};
@@ -1328,7 +1309,7 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
 
     if (creation.initialData)
     {
-        memcpy(allocationInfo.pMappedData, creation.initialData, static_cast<size_t>(creation.size));
+        vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, buffer->vmaAllocation, 0, creation.size);
     }
 
     VkBufferDeviceAddressInfo bufferBDAInfo{};
@@ -1365,8 +1346,8 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         bufferInfo.size = imageSize;
 
         VmaAllocationCreateInfo memoryInfo{};
-        memoryInfo.flags = VMA_ALLOCATION_CREATE_STRATEGY_BEST_FIT_BIT;
-        memoryInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+        memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+        memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
         VmaAllocationInfo allocationInfo{};
         VkBuffer stagingBuffer;
@@ -1374,10 +1355,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &stagingBuffer, &stagingAllocation, &allocationInfo));
 
         //Copy buffer data
-        void* destinationData;
-        vmaMapMemory(VMAAllocator, stagingAllocation, &destinationData);
-        memcpy(destinationData, creation.initialData, static_cast<size_t>(imageSize));
-        vmaUnmapMemory(VMAAllocator, stagingAllocation);
+        vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, stagingAllocation, 0, imageSize);
 
         //Execute command buffer
         VkCommandBufferBeginInfo beginInfo{};
@@ -1430,7 +1408,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
     return handle;
 }
 
-PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
+PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation, bool debugRendering)
 {
     PipelineHandle handle = { pipelines.obtainResource() };
     if (handle.index == INVALID_INDEX)
@@ -1482,7 +1460,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
     VkPushConstantRange range{};
     range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     range.offset = 0;
-    range.size = 24;
+    range.size = 128;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1561,7 +1539,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.topology = debugRendering == false ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
         pipelineInfo.pInputAssemblyState = &inputAssembly;
@@ -2309,7 +2287,7 @@ void GPUDevice::createSwapchain()
 
     swapchainWidth = static_cast<uint16_t>(Window::instance()->width);
     swapchainHeight = static_cast<uint16_t>(Window::instance()->height);
-
+    
     VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = vulkanWindowSurface;
@@ -2394,7 +2372,35 @@ void GPUDevice::resizeSwapchain()
     Texture* vkDepthTexture = accessTexture(depthTexture);
     vulkanResizeTexture(*this, vkDepthTexture, vkTextureToDelete, swapchainWidth, swapchainHeight, 1);
 
+    transitionDepthImage(depthTexture);
+
     destroyTexture(textureToDelete);
+}
+
+void GPUDevice::transitionDepthImage(TextureHandle texture)
+{
+    Texture* vkDepthTexture = accessTexture(texture);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    CommandBuffer* commandBuffer = getInstantCommandBuffer();
+    vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
+
+    transitionImageLayout(commandBuffer->vkCommandBuffer, vkDepthTexture->vkImage, vkDepthTexture->vkFormat,
+                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
+
+    vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
+
+    //Submit command buffer
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
+
+    vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(vulkanQueue);
 }
 
 //Map/Unmap
@@ -2542,12 +2548,15 @@ void GPUDevice::present()
             Texture* texture = accessTexture({ textureToUpdate.handle });
 
             VkWriteDescriptorSet& descriptorWrite = bindlessDescriptorWrites[currentWriteIndex];
-            descriptorWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.pNext = nullptr;
             descriptorWrite.descriptorCount = 1;
             descriptorWrite.dstArrayElement = textureToUpdate.handle;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrite.dstSet = bindlessDescriptorSet;
             descriptorWrite.dstBinding = BINDLESS_TEXTURE_BINDING;
+            descriptorWrite.pBufferInfo = nullptr;
+            descriptorWrite.pTexelBufferView = nullptr;
 
             //Handles should be the same.
             VOID_ASSERT(texture->handle.index == textureToUpdate.handle);

@@ -96,7 +96,7 @@ struct GPUDevice
     BufferHandle createBuffer(const BufferCreation& creation);
     BufferHandle createBindlessBuffer(const BufferCreation& creation);
     TextureHandle createTexture(const TextureCreation& creation);
-    PipelineHandle createPipeline(const PipelineCreation& creation);
+    PipelineHandle createPipeline(const PipelineCreation& creation, bool debugRendering = false);
     SamplerHandle createSampler(const SamplerCreation& creation);
     DescriptorSetLayoutHandle createDescriptorSetLayout(const DescriptorSetLayoutCreation& creation);
     DescriptorSetHandle createDescriptorSet(const DescriptorSetCreation& creation);
@@ -133,6 +133,8 @@ struct GPUDevice
     void createSwapchain();
     void destroySwapchain();
     void resizeSwapchain();
+
+    void transitionDepthImage(TextureHandle depthResource);
 
     //Map/Unmap
     void* mapBuffer(const MapBufferParameters& parameters);

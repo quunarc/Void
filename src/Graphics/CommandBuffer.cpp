@@ -242,7 +242,7 @@ void CommandBuffer::clearDepthStencil(float depth, uint8_t stencil)
     clears[1].depthStencil.stencil = stencil;
 }
 
-void CommandBuffer::draw(uint32_t firstVertex, uint32_t vertexCount, uint32_t firstInstance, uint32_t instanceCount)
+void CommandBuffer::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 {
     vkCmdDraw(vkCommandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }
@@ -427,6 +427,8 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
     case VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT:
         destinationBufferAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
         break;
+    default:
+        break;
     }
 
     switch (barrier.sourcePipelineStage) 
@@ -441,6 +443,8 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
         break;
     case VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT:
         sourceBufferAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+        break;
+    default:
         break;
     }
 

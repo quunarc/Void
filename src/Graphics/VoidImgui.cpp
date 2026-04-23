@@ -466,7 +466,6 @@ namespace
 
         //Render command lists.
         int counts = drawData->CmdListsCount;
-
         commands.bindDescriptorSet(&uiDescriptorSet, 1, nullptr, 0, 0);
         commands.bindlessDescriptorSet(1);
 

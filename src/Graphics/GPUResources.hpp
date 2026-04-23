@@ -206,6 +206,7 @@ struct BufferCreation
 struct TextureCreation 
 {
     void* initialData = nullptr;
+    uint32_t layerCount = 1;
     uint16_t width = 1;
     uint16_t height = 1;
     uint16_t depth = 1;
@@ -544,8 +545,8 @@ struct Buffer
     uint32_t size = 0;
     uint32_t globalOffset = 0;
 
-    BufferHandle handle;
-    BufferHandle parentBuffer;
+    BufferHandle handle = INVALID_BUFFER;
+    BufferHandle parentBuffer = INVALID_BUFFER;
 
     const char* name = nullptr;
 };

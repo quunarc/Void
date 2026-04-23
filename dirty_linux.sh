@@ -1,2 +1,8 @@
 mkdir build
-cmake -G "Unix Makefiles" -S . -B build
+read -p "Debug or release? [d/r]" version && [[ $version == [dD] || $version == [rR] ]]
+
+if [ $version == r ]; then
+    cmake -G "Unix Makefiles" -S . -B build -DCMAKE_BUILD_TYPE=Release
+elif [ $version == d ]; then
+    cmake -G "Unix Makefiles" -S . -B build -DCMAKE_BUILD_TYPE=Debug
+fi
