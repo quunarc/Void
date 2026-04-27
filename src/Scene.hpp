@@ -109,7 +109,7 @@ struct Scene
     JPH::BodyCreationSettings sphereSettings;
     JPH::BodyCreationSettings sphereSettings2;
 
-    uint32_t totalEntities = 1111;
+    uint32_t totalEntities = 4444;
     uint32_t totalColliders = 4;
     uint32_t currentLastEntity;
     uint32_t currentDebugRendererIndex;
@@ -122,6 +122,7 @@ struct Scene
     Array<EntityData> entityData;
     Array<DebugRendererData> debugRendererData;
     Array<Model> models;
+    Array<JPH::BodyID> bodiesToBeAdded;
 
     HeapAllocator* allocator;
 };

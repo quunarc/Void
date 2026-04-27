@@ -65,7 +65,7 @@ void CommandBuffer::beginRendering()
     VkRenderingAttachmentInfo colourAttachment{};
     colourAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     colourAttachment.pNext = nullptr;
-    colourAttachment.imageView = device->vulkanSwapchainImageViews[device->currentFrame];
+    colourAttachment.imageView = device->vulkanSwapchainImageViews[device->vulkanImageIndex];
     colourAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colourAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
     colourAttachment.resolveImageView = VK_NULL_HANDLE;

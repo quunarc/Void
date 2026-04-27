@@ -384,20 +384,20 @@ int main(int argc, char** argv)
                 debugRenderer = !debugRenderer;
             }
 
-            //NOTE: This must be after the OS messages.
-            imgui->newFrame();
+            ////NOTE: This must be after the OS messages.
+            //imgui->newFrame();
 
-            if (ImGui::Begin("Void ImGui"))
-            {
-                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            }
-            ImGui::End();
+            //if (ImGui::Begin("Void ImGui"))
+            //{
+            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            //}
+            //ImGui::End();
 
-            if (ImGui::Begin("GPU"))
-            {
-                gpuProfiler.imguiDraw();
-            }
-            ImGui::End();
+            //if (ImGui::Begin("GPU"))
+            //{
+            //    gpuProfiler.imguiDraw();
+            //}
+            //ImGui::End();
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -424,10 +424,11 @@ int main(int argc, char** argv)
             gpuCommands->clearDepthStencil(0.f, 0);
             gpuCommands->beginRendering();
 
-            //Skybox!
-            gpuCommands->bindPipeline(skyboxPipeline);
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
+
+            //Skybox!
+            gpuCommands->bindPipeline(skyboxPipeline);
 
             //Update the perspective matrix for the skybox.
             if (skyboxCBData)
@@ -459,8 +460,6 @@ int main(int argc, char** argv)
 
             //Scene
             gpuCommands->bindPipeline(cubePipeline);
-            gpuCommands->setScissor(nullptr);
-            gpuCommands->setViewport(nullptr);
 
             gpuCommands->bindlessDescriptorSet(1);
 
@@ -528,12 +527,11 @@ int main(int argc, char** argv)
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
             scratchAllocator.freeMarker(physicsMarker);
 
+            //mat4s globalModel{};
             if (debugRenderer)
             {
                 //Debug
                 gpuCommands->bindPipeline(debugPipeline);
-                gpuCommands->setScissor(nullptr);
-                gpuCommands->setViewport(nullptr);
 
                 uint32_t debugRendererMarker = scratchAllocator.getMarker();
 
@@ -579,7 +577,7 @@ int main(int argc, char** argv)
                 vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
                 scratchAllocator.freeMarker(debugRendererMarker);
             }
-            imgui->render(*gpuCommands);
+            //imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
@@ -590,7 +588,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            ImGui::Render();
+            //ImGui::Render();
         }
 
         //FrameMark;
