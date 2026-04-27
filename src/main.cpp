@@ -357,13 +357,6 @@ int main(int argc, char** argv)
         //New Frame
         if (Window::instance()->minimised == false)
         {
-            //On Windows with an Nvidia graphics card and using SDL3 the synchronisation drifts when a window events when I'm using synchronisation1. 
-            //This seem to be happening because the presentation engine or something internal driver thing is causing the frame to continue to push frames to the screen.
-            //Meaning that when we restart the event loop for rendering after an Window event the currentFrame mis-matches with what the actual currentFrame is.
-            //This happens when submitting the main queue for some work. The only fix I could find is idling the main queue at the beginning of every frame.
-            //For some reason this causes everything to remain in sync when an Window even happens.
-            vkQueueWaitIdle(gpu.vulkanQueue);
-
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
             if (gpu.newFrame() == false)
