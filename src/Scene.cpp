@@ -90,7 +90,7 @@ void Scene::buildScene(Physics& physics)
         JPH::BodyCreationSettings rockShapeSettings;
         rockShapeSettings.SetShape(rockShapeRef2);
         rockShapeSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
-        rockShapeSettings.mRotation = JPH::Quat({ rotx, roty, rotz, rotx }).Normalized();
+        rockShapeSettings.mRotation = JPH::Quat(rotx, roty, rotz, rotx).Normalized();
         rockShapeSettings.mMotionType = JPH::EMotionType::Static;
         rockShapeSettings.mObjectLayer = Layers::MOVING;
         buildRigidBodyEntity(physics, rockModelIndex, position, axis, angle, rockShapeSettings, { 1.f, 0.f, 0.f, 1.f });

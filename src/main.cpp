@@ -477,7 +477,7 @@ int main(int argc, char** argv)
 
             uint32_t physicsMarker = scratchAllocator.getMarker();
             Array<EntityData> physicsUpdateDataArray;
-            physicsUpdateDataArray.init(&scratchAllocator, 4);
+            physicsUpdateDataArray.init(&scratchAllocator, scene.totalEntities);
 
             for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
             {
@@ -529,7 +529,7 @@ int main(int argc, char** argv)
                 uint32_t debugRendererMarker = scratchAllocator.getMarker();
 
                 Array<DebugRendererData> debugRenderingDataArray;
-                debugRenderingDataArray.init(&scratchAllocator, 4);
+                debugRenderingDataArray.init(&scratchAllocator, scene.totalEntities);
 
                 Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer);
                 pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
