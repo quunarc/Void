@@ -852,6 +852,7 @@ vprint("Instance created.\n");
     physical13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     physical13Features.pNext = &physical12Features;
     physical13Features.dynamicRendering = true;
+    physical13Features.synchronization2 = true;
 
     VkPhysicalDeviceFeatures2 physicalDeviceFeature2{};
     physicalDeviceFeature2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -932,6 +933,12 @@ vprint("Instance created.\n");
     void_free(supportedFormats, allocator);
 
     dymanicRenderingData.colour(vulkanSurfaceFormat.format);
+
+    vulkanImageIndex = 0;
+    currentFrame = 1;
+    previousFrame = 0;
+    absoluteFrame = 0;
+    timestampsEnabled = false;
 
     setPresentMode(presentMode);
     //Create swapchain
@@ -1046,12 +1053,6 @@ vprint("Instance created.\n");
     CommandBuffer** correctlyAllocatedBuffer = reinterpret_cast<CommandBuffer**>(memory + sizeof(GPUTimestampManager));
     VOID_ASSERTM(queuedCommandBuffers == correctlyAllocatedBuffer, "Wrong calculations for queue command buffers arrays. Should be %p, but it's %p",
         correctlyAllocatedBuffer, queuedCommandBuffers);
-
-    vulkanImageIndex = 0;
-    currentFrame = 1;
-    previousFrame = 0;
-    absoluteFrame = 0;
-    timestampsEnabled = false;
 
     resourceDeletionQueue.init(allocator, 16);
     descriptorSetUpdates.init(allocator, 16);
@@ -1298,7 +1299,7 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
     VmaAllocationCreateInfo memoryInfo{};
-    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
     VmaAllocationInfo allocationInfo{};
@@ -2330,6 +2331,18 @@ void GPUDevice::createSwapchain()
         viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
 
         check(vkCreateImageView(vulkanDevice, &viewInfo, vulkanAllocationCallbacks, &vulkanSwapchainImageViews[imageCount]));
+
+        StringBuffer imageName;
+        imageName.init(64, tempAllocator);
+        imageName.appendF("Swapchain_Image_View_%d", imageCount);
+
+        //VkObjectType objectType, uint64_t handle, const char* name
+        setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, std::bit_cast<uint64_t>(vulkanSwapchainImageViews[imageCount]), imageName.getText(0));
+
+        imageName.clear();
+        imageName.appendF("Swapchain_Image_%d", imageCount);
+
+        setResourceName(VK_OBJECT_TYPE_IMAGE, std::bit_cast<uint64_t>(vulkanSwapchainImages[imageCount]), imageName.getText(0));
     }
 
     swapchainIsValid = true;
@@ -2478,7 +2491,7 @@ bool GPUDevice::newFrame()
     if (swapchainIsValid)
     {
         vkWaitForFences(vulkanDevice, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
-
+        vkResetFences(vulkanDevice, 1, &framesInFlight[currentFrame]);
         VkResult result = vkAcquireNextImageKHR(vulkanDevice, vulkanSwapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &vulkanImageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
@@ -2488,8 +2501,6 @@ bool GPUDevice::newFrame()
         {
             VOID_ERROR("Failed to acquire swapchain image at image index %d", vulkanImageIndex);
         }
-
-        vkResetFences(vulkanDevice, 1, &framesInFlight[currentFrame]);
     }
 
     if (swapchainIsValid == false)
@@ -2498,7 +2509,7 @@ bool GPUDevice::newFrame()
     }
 
     //Command pool rest.
-    commandBufferRing.resetPools(currentFrame);
+    //commandBufferRing.resetPools(currentFrame);
 
     //Descriptor set update.
     if (descriptorSetUpdates.size)
@@ -2527,10 +2538,29 @@ void GPUDevice::present()
 
         vkCmdEndRendering(commandBuffer->vkCommandBuffer);
 
-        for (uint32_t i = 0; i < swapchainImageCount; ++i)
-        {
-            transitionImageLayout(commandBuffer->vkCommandBuffer, vulkanSwapchainImages[i], vulkanSurfaceFormat.format, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, false);
-        }
+        VkImageMemoryBarrier2 barrier{}; 
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = vulkanSwapchainImages[vulkanImageIndex];
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        VkDependencyInfo barrierPresentDependencyInfo{};
+        barrierPresentDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        barrierPresentDependencyInfo.imageMemoryBarrierCount = 1;
+        barrierPresentDependencyInfo.pImageMemoryBarriers = &barrier;
+
+        vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierPresentDependencyInfo);
 
         vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
     }
@@ -2591,31 +2621,26 @@ void GPUDevice::present()
     }
 
     //Subit command buffer.
-    VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[currentFrame] };
-    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitSemaphores = &imageAvailableSemaphore[currentFrame];
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = numQueuedCommandBuffers;
     submitInfo.pCommandBuffers = enqueuedCommandBuffers;
-
-    VkSemaphore signalSemaphores[] = { renderFinishSemaphore[currentFrame] };
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
+    submitInfo.pSignalSemaphores = &renderFinishSemaphore[vulkanImageIndex];
 
-    check(vkQueueSubmit(vulkanQueue, 1, &submitInfo, framesInFlight[currentFrame]));
+    vkQueueSubmit(vulkanQueue, 1, &submitInfo, framesInFlight[currentFrame]);
 
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    VkSwapchainKHR swapchains[] = { vulkanSwapchain };
+    presentInfo.pWaitSemaphores = &renderFinishSemaphore[vulkanImageIndex];
     presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapchains;
+    presentInfo.pSwapchains = &vulkanSwapchain;
     presentInfo.pImageIndices = &vulkanImageIndex;
 
     VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
@@ -2728,10 +2753,50 @@ void GPUDevice::resize(uint16_t width, uint16_t height)
 
 void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
 {
-    for (uint32_t i = 0; i < swapchainImageCount; ++i)
-    {
-        transitionImageLayout(commandBuffer->vkCommandBuffer, vulkanSwapchainImages[i], vulkanSurfaceFormat.format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, false);
-    }
+    VkImageMemoryBarrier2 barrierColour{};
+    barrierColour.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrierColour.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrierColour.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrierColour.srcStageMask = VK_PIPELINE_STAGE_NONE;
+    barrierColour.srcAccessMask = VK_ACCESS_NONE;
+    barrierColour.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrierColour.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrierColour.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierColour.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierColour.image = vulkanSwapchainImages[vulkanImageIndex];
+    barrierColour.subresourceRange.baseMipLevel = 0;
+    barrierColour.subresourceRange.levelCount = 1;
+    barrierColour.subresourceRange.baseArrayLayer = 0;
+    barrierColour.subresourceRange.layerCount = 1;
+    barrierColour.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    //Texture* depthTextureLocal = accessTexture(depthTexture);
+
+    //VkImageMemoryBarrier2 barrierDepth{};
+    //barrierDepth.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    //barrierDepth.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    //barrierDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    //barrierDepth.srcStageMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    //barrierDepth.srcAccessMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+    //barrierDepth.dstStageMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    //barrierDepth.dstAccessMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+    //barrierDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    //barrierDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    //barrierDepth.image = depthTextureLocal->vkImage;
+    //barrierDepth.subresourceRange.baseMipLevel = 0;
+    //barrierDepth.subresourceRange.levelCount = 1;
+    //barrierDepth.subresourceRange.baseArrayLayer = 0;
+    //barrierDepth.subresourceRange.layerCount = 1;
+    //barrierDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+    //VkImageMemoryBarrier2 barriers[] = { barrierColour, barrierDepth };
+
+    VkDependencyInfo barrierColourDependencyInfo{};
+    barrierColourDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    barrierColourDependencyInfo.imageMemoryBarrierCount = 1;
+    barrierColourDependencyInfo.pImageMemoryBarriers = &barrierColour;
+
+    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierColourDependencyInfo);
 }
 
 //Returns a vertex buffer usable for fullscreen that uses no vertices.

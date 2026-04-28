@@ -9,7 +9,8 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, BufferHandle 
 
     entities.init(allocator, totalEntities, totalEntities);
     entityData.init(allocator, totalEntities, totalEntities);
-    debugRendererData.init(allocator, totalColliders, totalColliders);
+    debugRendererData.init(allocator, totalEntities, totalEntities);
+    bodiesToBeAdded.init(allocator, totalEntities);
     models.init(allocator, 3, 3);
 
     models[rockModelIndex].loadModel("Assets/Models/out/rock.glb", gpu, sceneBuffer, descriptorSetLayout);
@@ -22,34 +23,13 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, BufferHandle 
 
 void Scene::buildScene(Physics& physics)
 {
-    JPH::SphereShapeSettings rockSphereSetting{13.5f};
     JPH::SphereShapeSettings duckSphereSettings{1.5f};
-    rockSphereSetting.SetEmbedded();
     duckSphereSettings.SetEmbedded();
-
-    JPH::ShapeSettings::ShapeResult rockShapeResult = rockSphereSetting.Create();
-    JPH::ShapeRefC rockShapeRef = rockShapeResult.Get();
 
     JPH::ShapeSettings::ShapeResult duckShapeResult = duckSphereSettings.Create();
     JPH::ShapeRefC duckShapeRef = duckShapeResult.Get();
 
-    vec3s position{0.f, 0.f, 0.f};
-    sphereSettings.SetShape(rockShapeRef);
-    sphereSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
-    sphereSettings.mRotation = JPH::Quat::sIdentity();
-    sphereSettings.mMotionType = JPH::EMotionType::Static;
-    sphereSettings.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(physics, rockModelIndex, position, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 0.f, 1.f, 1.f });
-
-    vec3s position2{ 20.f, 10.f, 10.f };
-    sphereSettings.SetShape(rockShapeRef);
-    sphereSettings.mPosition = JPH::Vec3Arg{ position2.x, position2.y, position2.z };
-    sphereSettings.mRotation = JPH::Quat::sIdentity();
-    sphereSettings.mMotionType = JPH::EMotionType::Static;
-    sphereSettings.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(physics, rockModelIndex, position2, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 0.f, 1.f, 1.f });
-
-    vec3s position1{ 10.f, 59.f, 0.f };
+    vec3s position1{ 20.f, 59.f, 0.f };
     sphereSettings2.SetShape(duckShapeRef);
     sphereSettings2.mPosition = JPH::Vec3Arg{ position1.x, position1.y, position1.z };
     sphereSettings2.mRotation = JPH::Quat::sIdentity();
@@ -57,7 +37,7 @@ void Scene::buildScene(Physics& physics)
     sphereSettings2.mObjectLayer = Layers::MOVING;
     buildRigidBodyEntity(physics, duckModelIndex, position1, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
 
-    vec3s position3{ 0.f, 0.f, 120.f };
+    vec3s position3{ 0.f, -10.f, 120.f };
     sphereSettings2.SetShape(duckShapeRef);
     sphereSettings2.mPosition = JPH::Vec3Arg{ position3.x, position3.y, position3.z };
     sphereSettings2.mRotation = JPH::Quat::sIdentity();
@@ -67,13 +47,13 @@ void Scene::buildScene(Physics& physics)
 
     // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
     // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
-    physics.bodyInterface->SetLinearVelocity(entities[2].bodyID, JPH::Vec3(0.f, -4.f, 0.f));
-    physics.bodyInterface->SetLinearVelocity(entities[3].bodyID, JPH::Vec3(0.f, 0.f, -8.f));
+    physics.bodyInterface->SetLinearVelocity(entities[0].bodyID, JPH::Vec3(0.f, -64.f, 0.f));
+    physics.bodyInterface->SetLinearVelocity(entities[1].bodyID, JPH::Vec3(0.f, 0.f, -64.f));
 
-    srand(42);
+    srand(time(0));
 
-    float sceneRadius = 500.f;
-    for (uint32_t i = 4; i < totalEntities; ++i)
+    float sceneRadius = 1000.f;
+    for (uint32_t i = 2; i < totalEntities; ++i)
     {
         vec3s position;
         position.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
@@ -87,14 +67,32 @@ void Scene::buildScene(Physics& physics)
         vec3s axis = glms_normalize({ rotx, roty, rotz });
         float angle = (float(rand()) / RAND_MAX) * M_PI_4;
 
-        buildNoneSoildEntity(rockModelIndex, position, axis, angle);
+        JPH::SphereShapeSettings rockSphereSetting2{ 13.5f };
+        rockSphereSetting2.SetEmbedded();
+
+        JPH::ShapeSettings::ShapeResult rockShapeResult2 = rockSphereSetting2.Create();
+        JPH::ShapeRefC rockShapeRef2 = rockShapeResult2.Get();
+
+        JPH::BodyCreationSettings rockShapeSettings;
+        rockShapeSettings.SetShape(rockShapeRef2);
+        rockShapeSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
+        rockShapeSettings.mRotation = JPH::Quat(rotx, roty, rotz, rotx).Normalized();
+        rockShapeSettings.mMotionType = JPH::EMotionType::Static;
+        rockShapeSettings.mObjectLayer = Layers::NON_MOVING;
+        buildRigidBodyEntity(physics, rockModelIndex, position, axis, angle, rockShapeSettings, { 1.f, 0.f, 0.f, 1.f });
     }
+
+    JPH::BodyInterface::AddState addingState = physics.bodyInterface->AddBodiesPrepare(bodiesToBeAdded.data, bodiesToBeAdded.size);
+    physics.bodyInterface->AddBodiesFinalize(bodiesToBeAdded.data, bodiesToBeAdded.size, addingState, JPH::EActivation::Activate);
 }
 
 void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, const vec3s& position, vec3s axis, float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour)
 {
     //Note that this uses the shorthand version of creating and adding a body to the world
-    entities[currentLastEntity].bodyID = physics.bodyInterface->CreateAndAddBody(shapeSetting, JPH::EActivation::Activate);
+    JPH::BodyID bodyID = physics.bodyInterface->CreateBody(shapeSetting)->GetID();
+    bodiesToBeAdded.push(bodyID);
+    entities[currentLastEntity].bodyID = bodyID;
+    entities[currentLastEntity].isDynamic = shapeSetting.mMotionType == JPH::EMotionType::Dynamic;
 
     JPH::EShapeSubType shapeType = shapeSetting.GetShape()->GetSubType();
     JPH::RMat44 shapeModel;
@@ -118,12 +116,11 @@ void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, co
 
     entities[currentLastEntity].debugRendererIndex = currentDebugRendererIndex;
 
-    vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
-
-    entityData[currentLastEntity].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(position));
+    entityData[currentLastEntity].pos = convertToMat4(shapePosition);
     entityData[currentLastEntity].colour = colour;
     entities[currentLastEntity].positionIndex = currentLastEntity;
     entities[currentLastEntity].modelIndex = modelIndex;
+    models[modelIndex].countOfModelType++;
 
     currentLastEntity++;
     currentDebugRendererIndex++;
@@ -159,4 +156,5 @@ void Scene::shutdownScene(GPUDevice& gpu, Physics& physics)
     entities.shutdown();
     entityData.shutdown();
     debugRendererData.shutdown();
+    bodiesToBeAdded.shutdown();
 }

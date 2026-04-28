@@ -32,7 +32,7 @@ namespace
 {
     // This is the max amount of rigid bodies that you can add to the physics system. If you try to add more you'll get an error.
     // Note: This value is low because this is a simple test. For a real project use something in the order of 65536.
-    static constexpr uint32_t cMaxBodies = 1024;
+    static constexpr uint32_t cMaxBodies = 65536;
 
     // This determines how many mutexes to allocate to protect rigid bodies from concurrent access. Set it to 0 for the default settings.
     static constexpr uint32_t cNumBodyMutexes = 0;
@@ -41,7 +41,7 @@ namespace
     // body pairs based on their bounding boxes and will insert them into a queue for the narrowphase). If you make this buffer
     // too small the queue will fill up and the broad phase jobs will start to do narrow phase work. This is slightly less efficient.
     // Note: This value is low because this is a simple test. For a real project use something in the order of 65536.
-    static constexpr uint32_t cMaxBodyPairs = 1024;
+    static constexpr uint32_t cMaxBodyPairs = 65536;
 
     // This is the maximum size of the contact constraint buffer. If more contacts (collisions between bodies) are detected than this
     // number then these contacts will be ignored and bodies will start interpenetrating / fall through the world.
@@ -102,7 +102,7 @@ void Physics::initPhysics()
     // We need a job system that will execute physics jobs on multiple threads. Typically
     // you would implement the JobSystem interface yourself and let Jolt Physics run on top
     // of your own job scheduler. JobSystemThreadPool is an example implementation.
-    jobSystem.Init(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, 1);
+    jobSystem.Init(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, std::thread::hardware_concurrency() - 1);
 
     physicsSystem.Init(cMaxBodies, cNumBodyMutexes, cMaxBodyPairs, cMaxContactConstraints, broadPhaseLayerInterface, objectVsBroadphaseLayerFilter, objectVsObjectLayerFilter);
 
@@ -119,10 +119,11 @@ void Physics::initPhysics()
     step = 0;
 }
 
-void Physics::updatePhysics()
+void Physics::updatePhysics(float delta)
 {
-    // If you take larger steps than 1 / 60th of a second you need to do multiple collision steps in order to keep the simulation stable. Do 1 collision step per 1 / 60th of a second (round up).
-    const int cCollisionSteps = 1;
+    // If you take larger steps than 1 / 60th of a second you need to do multiple collision steps in order to keep the simulation stable. 
+    // Do 1 collision step per 1 / 60th of a second (round up).
+    int cCollisionSteps = 1;
 
     // Step the world
     physicsSystem.Update(cDeltaTime, cCollisionSteps, &tempAllocator, &jobSystem);

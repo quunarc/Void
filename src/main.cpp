@@ -357,13 +357,6 @@ int main(int argc, char** argv)
         //New Frame
         if (Window::instance()->minimised == false)
         {
-            //On Windows with an Nvidia graphics card and using SDL3 the synchronisation drifts when a window events when I'm using synchronisation1. 
-            //This seem to be happening because the presentation engine or something internal driver thing is causing the frame to continue to push frames to the screen.
-            //Meaning that when we restart the event loop for rendering after an Window event the currentFrame mis-matches with what the actual currentFrame is.
-            //This happens when submitting the main queue for some work. The only fix I could find is idling the main queue at the beginning of every frame.
-            //For some reason this causes everything to remain in sync when an Window even happens.
-            vkQueueWaitIdle(gpu.vulkanQueue);
-
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
             if (gpu.newFrame() == false)
@@ -384,20 +377,20 @@ int main(int argc, char** argv)
                 debugRenderer = !debugRenderer;
             }
 
-            //NOTE: This must be after the OS messages.
-            imgui->newFrame();
+            ////NOTE: This must be after the OS messages.
+            //imgui->newFrame();
 
-            if (ImGui::Begin("Void ImGui"))
-            {
-                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            }
-            ImGui::End();
+            //if (ImGui::Begin("Void ImGui"))
+            //{
+            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            //}
+            //ImGui::End();
 
-            if (ImGui::Begin("GPU"))
-            {
-                gpuProfiler.imguiDraw();
-            }
-            ImGui::End();
+            //if (ImGui::Begin("GPU"))
+            //{
+            //    gpuProfiler.imguiDraw();
+            //}
+            //ImGui::End();
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -409,7 +402,7 @@ int main(int argc, char** argv)
             float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
             beginFrameTick = currentTick;
 
-            physics.updatePhysics();
+            physics.updatePhysics(deltaTime);
             
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
@@ -418,16 +411,16 @@ int main(int argc, char** argv)
             gpuCommands->pushMarker("Frame");
 
             gpu.beginRenderingTransition(gpuCommands);
-
+            gpuCommands->beginRendering();
             //gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
             gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
-            gpuCommands->beginRendering();
+
+            gpuCommands->setScissor(nullptr);
+            gpuCommands->setViewport(nullptr);
 
             //Skybox!
             gpuCommands->bindPipeline(skyboxPipeline);
-            gpuCommands->setScissor(nullptr);
-            gpuCommands->setViewport(nullptr);
 
             //Update the perspective matrix for the skybox.
             if (skyboxCBData)
@@ -459,8 +452,6 @@ int main(int argc, char** argv)
 
             //Scene
             gpuCommands->bindPipeline(cubePipeline);
-            gpuCommands->setScissor(nullptr);
-            gpuCommands->setViewport(nullptr);
 
             gpuCommands->bindlessDescriptorSet(1);
 
@@ -485,7 +476,7 @@ int main(int argc, char** argv)
 
             uint32_t physicsMarker = scratchAllocator.getMarker();
             Array<EntityData> physicsUpdateDataArray;
-            physicsUpdateDataArray.init(&scratchAllocator, 4);
+            physicsUpdateDataArray.init(&scratchAllocator, scene.totalEntities);
 
             for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
             {
@@ -494,18 +485,20 @@ int main(int argc, char** argv)
 
                 if (entity.debugRendererIndex != UINT32_MAX)
                 {
-                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
-
                     EntityData physicsPosition{};
+                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
                     physicsPosition.pos = convertToMat4(newPos);
                     physicsPosition.colour = scene.entityData[entityIndex].colour;
 
                     physicsUpdateDataArray.push(physicsPosition);
                 }
+            }
 
-                for (uint32_t meshIndex = 0; meshIndex < scene.models[entity.modelIndex].meshDraws.size; ++meshIndex)
+            for (uint32_t modelIndexType = 0; modelIndexType < scene.models.size - 1; ++modelIndexType)
+            {
+                for (uint32_t meshIndex = 0; meshIndex < scene.models[modelIndexType].meshDraws.size; ++meshIndex)
                 {
-                    MeshDraw meshDraw = scene.models[entity.modelIndex].meshDraws[meshIndex];
+                    MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[meshIndex];
 
                     MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
                     MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
@@ -521,24 +514,30 @@ int main(int argc, char** argv)
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
 
-                    gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+                    if (modelIndexType == scene.models.size - 2)
+                    {
+                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
+                    }
+                    else 
+                    {
+                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, scene.models[modelIndexType + 1].countOfModelType);
+                    }
                 }
             }
             
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
             scratchAllocator.freeMarker(physicsMarker);
 
+            //mat4s globalModel{};
             if (debugRenderer)
             {
                 //Debug
                 gpuCommands->bindPipeline(debugPipeline);
-                gpuCommands->setScissor(nullptr);
-                gpuCommands->setViewport(nullptr);
 
                 uint32_t debugRendererMarker = scratchAllocator.getMarker();
 
                 Array<DebugRendererData> debugRenderingDataArray;
-                debugRenderingDataArray.init(&scratchAllocator, 4);
+                debugRenderingDataArray.init(&scratchAllocator, scene.totalEntities);
 
                 Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer);
                 pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
@@ -549,37 +548,47 @@ int main(int argc, char** argv)
                     {
                         globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
 
-                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
-                        
                         DebugRendererData debugRenderData{};
+                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
                         debugRenderData.position = convertToMat4(newPos);
                         debugRenderData.globalModel = globalModel;
                         debugRenderData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
                         debugRenderData.model = scene.debugRendererData[entityIndex].model;
                         debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
 
-                        pushConstants.index = entity.positionIndex;
-                        VOID_ASSERTM(scene.models[entity.modelIndex].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
-
-                        MeshDraw meshDraw = scene.models[scene.debugSphereIndex].meshDraws[0];
-
-                        Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
-                        pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
-
-                        vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
-
-                        gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
-
-                        gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
-
                         debugRenderingDataArray.push(debugRenderData);
+                        pushConstants.index = entity.positionIndex;
                     }
                 }
 
+                for (uint32_t modelIndexType = 2; modelIndexType < scene.models.size; ++modelIndexType)
+                {
+                    VOID_ASSERTM(scene.models[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
+
+                    MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[0];
+
+                    Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
+                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+                    gpuCommands->drawIndexed(meshDraw.count, scene.entities.size, 0, 0, 0);
+
+                    //TODO: Add the data structures needed to allow for this.
+                    //if (modelIndexType == scene.models.size - 1)
+                    //{
+                    //    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
+                    //}
+                    //else
+                    //{
+                    //    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, scene.models[modelIndexType + 1].countOfModelType);
+                    //}
+                }
                 vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
                 scratchAllocator.freeMarker(debugRendererMarker);
             }
-            imgui->render(*gpuCommands);
+            //imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
@@ -590,7 +599,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            ImGui::Render();
+            //ImGui::Render();
         }
 
         //FrameMark;
@@ -598,8 +607,6 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    //gpu.unmapBuffer(debugRendererDataMap);
-    //gpu.unmapBuffer(positionMap);
     gpu.unmapBuffer(cbMap);
     gpu.unmapBuffer(skyboxMaterialMap);
     gpu.unmapBuffer(skyboxCBMap);

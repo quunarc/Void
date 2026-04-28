@@ -53,6 +53,8 @@ namespace
         JPH::BodyID bodyID;
         //This only exists if debugRendererIndex != UINT32_MAX. 
         JPH::Shape* shape;
+
+        bool isDynamic;
     };
 
     inline mat4s convertToMat4(JPH::RMat44& jphMat) 
@@ -94,7 +96,6 @@ namespace
         vector.z = jphVec3.GetZ(); 
         return vector;
     }
-    //inline JPH::Vec3& convertToJPHVec3(vec3s& jphVec3) { return *reinterpret_cast<JPH::Vec3*>(&jphVec3); }
 }
 
 struct Scene
@@ -109,7 +110,7 @@ struct Scene
     JPH::BodyCreationSettings sphereSettings;
     JPH::BodyCreationSettings sphereSettings2;
 
-    uint32_t totalEntities = 1111;
+    uint32_t totalEntities = 4444;
     uint32_t totalColliders = 4;
     uint32_t currentLastEntity;
     uint32_t currentDebugRendererIndex;
@@ -122,6 +123,7 @@ struct Scene
     Array<EntityData> entityData;
     Array<DebugRendererData> debugRendererData;
     Array<Model> models;
+    Array<JPH::BodyID> bodiesToBeAdded;
 
     HeapAllocator* allocator;
 };

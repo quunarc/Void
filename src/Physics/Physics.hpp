@@ -187,7 +187,7 @@ struct Physics
         delete JPH::Factory::sInstance;
         JPH::Factory::sInstance = nullptr;
     }
-    JPH::TempAllocatorImpl tempAllocator{10 * 1024 * 1024};
+    JPH::TempAllocatorImpl tempAllocator{20 * 1024 * 1024};
 
     // The main way to interact with the bodies in the physics system is through the body interface. There is a locking and a non-locking
     // variant of this. We're going to use the locking version (even though we're not planning to access bodies from multiple threads)
@@ -230,7 +230,7 @@ struct Physics
     static constexpr float cDeltaTime = 1.0f / 60.0f;
 
 	void initPhysics();
-	void updatePhysics();
+	void updatePhysics(float delta);
 	void shutdownPhysics();
 };
 
