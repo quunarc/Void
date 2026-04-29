@@ -46,7 +46,8 @@ namespace
         //If we do this we can have a gaint bindless positionally buffer that has everything in it we just index into the that position array.
         uint32_t positionIndex;
         //We can loop through all the entities and use that model index to fetch the meshDraw to be able to draw all the models regardless of the model.
-        uint32_t modelIndex;
+        uint32_t modelIndex = UINT32_MAX;
+        uint32_t debugModelIndex = UINT32_MAX;
 
         uint32_t debugRendererIndex;
 
@@ -102,7 +103,7 @@ struct Scene
 {
     void initScene(HeapAllocator* inAllocator, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
     void buildScene(Physics& physics);
-    void buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, const vec3s& position, vec3s axis,
+    void buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, uint32_t debugModelIndex, const vec3s& position, vec3s axis,
                               float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour);
     void buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axis, float angle);
     void shutdownScene(GPUDevice& gpu, Physics& physics);
@@ -115,14 +116,17 @@ struct Scene
     uint32_t currentLastEntity;
     uint32_t currentDebugRendererIndex;
 
+    //These arrays indices are now seperate into their own arrays.
     static constexpr uint32_t rockModelIndex = 0;
     static constexpr uint32_t duckModelIndex = 1;
-    static constexpr uint32_t debugSphereIndex = 2;
+
+    static constexpr uint32_t debugSphereIndex = 0;
 
     Array<Entity> entities;
     Array<EntityData> entityData;
     Array<DebugRendererData> debugRendererData;
     Array<Model> models;
+    Array<Model> debugModels;
     Array<JPH::BodyID> bodiesToBeAdded;
 
     HeapAllocator* allocator;

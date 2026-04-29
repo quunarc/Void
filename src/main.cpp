@@ -494,7 +494,7 @@ int main(int argc, char** argv)
                 }
             }
 
-            for (uint32_t modelIndexType = 0; modelIndexType < scene.models.size - 1; ++modelIndexType)
+            for (uint32_t modelIndexType = 0; modelIndexType < scene.models.size; ++modelIndexType)
             {
                 for (uint32_t meshIndex = 0; meshIndex < scene.models[modelIndexType].meshDraws.size; ++meshIndex)
                 {
@@ -514,7 +514,7 @@ int main(int argc, char** argv)
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
 
-                    if (modelIndexType == scene.models.size - 2)
+                    if (modelIndexType == scene.models.size - 1)
                     {
                         gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
                     }
@@ -561,11 +561,11 @@ int main(int argc, char** argv)
                     }
                 }
 
-                for (uint32_t modelIndexType = 2; modelIndexType < scene.models.size; ++modelIndexType)
+                for (uint32_t modelIndexType = 0; modelIndexType < scene.debugModels.size; ++modelIndexType)
                 {
-                    VOID_ASSERTM(scene.models[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
+                    VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
 
-                    MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[0];
+                    MeshDraw meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
 
                     Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
@@ -573,18 +573,18 @@ int main(int argc, char** argv)
                     vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
-                    gpuCommands->drawIndexed(meshDraw.count, scene.entities.size, 0, 0, 0);
 
                     //TODO: Add the data structures needed to allow for this.
-                    //if (modelIndexType == scene.models.size - 1)
-                    //{
-                    //    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
-                    //}
-                    //else
-                    //{
-                    //    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, scene.models[modelIndexType + 1].countOfModelType);
-                    //}
+                    if (modelIndexType == scene.debugModels.size - 1)
+                    {
+                        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].countOfModelType, 0, 0, 0);
+                    }
+                    else
+                    {
+                        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].countOfModelType, 0, 0, scene.debugModels[modelIndexType + 1].countOfModelType);
+                    }
                 }
+
                 vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
                 scratchAllocator.freeMarker(debugRendererMarker);
             }
