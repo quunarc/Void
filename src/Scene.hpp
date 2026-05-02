@@ -18,16 +18,13 @@ namespace
     struct DebugRendererData
     {
         mat4s position;
-        //We also need the global scale to be the same as the regular geometry other wise things will be too small.
-        mat4s globalModel;
         //We need this because the final matrix that comes out the glb after multiplying 
         //all local nodes together needs to be the same as the collision geometry.
         //Meaning that model matrix we get out of the actual geometry needs to be given to the debug geometry if they tied together when creating the buffer.
         mat4s model;
-        mat4s viewPerspective;
         //Colour will be used as a key for various different objects.
         vec4s colour;
-        float pad[4];
+        float padd[4];
     };
 
     struct EntityData
@@ -46,7 +43,8 @@ namespace
         //If we do this we can have a gaint bindless positionally buffer that has everything in it we just index into the that position array.
         uint32_t positionIndex;
         //We can loop through all the entities and use that model index to fetch the meshDraw to be able to draw all the models regardless of the model.
-        uint32_t modelIndex;
+        uint32_t modelIndex = UINT32_MAX;
+        uint32_t debugModelIndex = UINT32_MAX;
 
         uint32_t debugRendererIndex;
 
@@ -102,7 +100,7 @@ struct Scene
 {
     void initScene(HeapAllocator* inAllocator, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
     void buildScene(Physics& physics);
-    void buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, const vec3s& position, vec3s axis,
+    void buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, uint32_t debugModelIndex, const vec3s& position, vec3s axis,
                               float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour);
     void buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axis, float angle);
     void shutdownScene(GPUDevice& gpu, Physics& physics);
@@ -115,14 +113,17 @@ struct Scene
     uint32_t currentLastEntity;
     uint32_t currentDebugRendererIndex;
 
+    //These arrays indices are now seperate into their own arrays.
     static constexpr uint32_t rockModelIndex = 0;
     static constexpr uint32_t duckModelIndex = 1;
-    static constexpr uint32_t debugSphereIndex = 2;
+
+    static constexpr uint32_t debugSphereIndex = 0;
 
     Array<Entity> entities;
     Array<EntityData> entityData;
     Array<DebugRendererData> debugRendererData;
     Array<Model> models;
+    Array<Model> debugModels;
     Array<JPH::BodyID> bodiesToBeAdded;
 
     HeapAllocator* allocator;

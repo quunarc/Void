@@ -12,10 +12,12 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, BufferHandle 
     debugRendererData.init(allocator, totalEntities, totalEntities);
     bodiesToBeAdded.init(allocator, totalEntities);
     models.init(allocator, 3, 3);
+    debugModels.init(allocator, 1, 1);
 
     models[rockModelIndex].loadModel("Assets/Models/out/rock.glb", gpu, sceneBuffer, descriptorSetLayout);
     models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, sceneBuffer, descriptorSetLayout);
-    models[debugSphereIndex].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
+
+    debugModels[debugSphereIndex].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
 
     currentLastEntity = 0;
     currentDebugRendererIndex = 0;
@@ -35,7 +37,7 @@ void Scene::buildScene(Physics& physics)
     sphereSettings2.mRotation = JPH::Quat::sIdentity();
     sphereSettings2.mMotionType = JPH::EMotionType::Dynamic;
     sphereSettings2.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(physics, duckModelIndex, position1, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
+    buildRigidBodyEntity(physics, duckModelIndex, debugSphereIndex, position1, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
 
     vec3s position3{ 0.f, -10.f, 120.f };
     sphereSettings2.SetShape(duckShapeRef);
@@ -43,7 +45,7 @@ void Scene::buildScene(Physics& physics)
     sphereSettings2.mRotation = JPH::Quat::sIdentity();
     sphereSettings2.mMotionType = JPH::EMotionType::Dynamic;
     sphereSettings2.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(physics, duckModelIndex, position3, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
+    buildRigidBodyEntity(physics, duckModelIndex, debugSphereIndex, position3, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
 
     // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
     // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
@@ -79,14 +81,15 @@ void Scene::buildScene(Physics& physics)
         rockShapeSettings.mRotation = JPH::Quat(rotx, roty, rotz, rotx).Normalized();
         rockShapeSettings.mMotionType = JPH::EMotionType::Static;
         rockShapeSettings.mObjectLayer = Layers::NON_MOVING;
-        buildRigidBodyEntity(physics, rockModelIndex, position, axis, angle, rockShapeSettings, { 1.f, 0.f, 0.f, 1.f });
+        buildRigidBodyEntity(physics, rockModelIndex, debugSphereIndex, position, axis, angle, rockShapeSettings, { 1.f, 0.f, 0.f, 1.f });
     }
 
     JPH::BodyInterface::AddState addingState = physics.bodyInterface->AddBodiesPrepare(bodiesToBeAdded.data, bodiesToBeAdded.size);
     physics.bodyInterface->AddBodiesFinalize(bodiesToBeAdded.data, bodiesToBeAdded.size, addingState, JPH::EActivation::Activate);
 }
 
-void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, const vec3s& position, vec3s axis, float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour)
+void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, uint32_t debugModelIndex, const vec3s& position, vec3s axis, 
+                                 float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour)
 {
     //Note that this uses the shorthand version of creating and adding a body to the world
     JPH::BodyID bodyID = physics.bodyInterface->CreateBody(shapeSetting)->GetID();
@@ -120,7 +123,9 @@ void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, co
     entityData[currentLastEntity].colour = colour;
     entities[currentLastEntity].positionIndex = currentLastEntity;
     entities[currentLastEntity].modelIndex = modelIndex;
+    entities[currentLastEntity].debugModelIndex = debugModelIndex;
     models[modelIndex].countOfModelType++;
+    debugModels[debugModelIndex].countOfModelType++;
 
     currentLastEntity++;
     currentDebugRendererIndex++;
@@ -135,6 +140,7 @@ void Scene::buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axi
     entities[currentLastEntity].positionIndex = currentLastEntity;
     entities[currentLastEntity].modelIndex = modelIndex;
     entities[currentLastEntity].debugRendererIndex = UINT32_MAX;
+    models[modelIndex].countOfModelType++;
 
     currentLastEntity++;
 }
@@ -152,6 +158,12 @@ void Scene::shutdownScene(GPUDevice& gpu, Physics& physics)
         models[i].shutdownModel(gpu);
     }
     models.shutdown();
+
+    for (uint32_t i = 0; i < debugModels.size; ++i)
+    {
+        debugModels[i].shutdownModel(gpu);
+    }
+    debugModels.shutdown();
 
     entities.shutdown();
     entityData.shutdown();
