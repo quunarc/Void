@@ -26,21 +26,32 @@ const int indices[36] = int[36]
 	3, 2, 6, 6, 7, 3	// top
 );
 
-//layout(scalar, set = 0, binding = 0) uniform LocalConstants
-//{
-//    mat4 globalModel;
-//    mat4 viewPerspective;
-//    vec4 eye;
-//    vec4 light;
-//};
-//
-
 struct SceneData
 {
     mat4 viewPerspective;
     mat4 globalModel;
     vec4 eye;
     vec4 light;
+};
+
+struct Vertices
+{
+	float pad;
+};
+
+struct ModelPosition
+{
+	float pad;
+};
+
+layout(scalar, buffer_reference) readonly buffer VertexData
+{
+    Vertices vertexData[];
+};
+
+layout(scalar, buffer_reference) readonly buffer ModelPositionData
+{
+    ModelPosition modelPositions[];
 };
 
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
@@ -68,6 +79,8 @@ layout (location = 0) out vec3 dir;
 
 layout(scalar, push_constant) uniform entityIndex
 {
+    VertexData vertexDataReference;
+    ModelPositionData modelPositionsReference;
     SceneBufferData sceneBufferReference;
 };
 
