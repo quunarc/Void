@@ -1,6 +1,7 @@
 ﻿#version 460
 
 #extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
 
 const vec3 pos[8] = vec3[8]
 (
@@ -25,12 +26,26 @@ const int indices[36] = int[36]
 	3, 2, 6, 6, 7, 3	// top
 );
 
-layout(scalar, set = 0, binding = 0) uniform LocalConstants
+//layout(scalar, set = 0, binding = 0) uniform LocalConstants
+//{
+//    mat4 globalModel;
+//    mat4 viewPerspective;
+//    vec4 eye;
+//    vec4 light;
+//};
+//
+
+struct SceneData
 {
-    mat4 globalModel;
     mat4 viewPerspective;
+    mat4 globalModel;
     vec4 eye;
     vec4 light;
+};
+
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
+{
+    SceneData sceneData;
 };
 
 layout(scalar, set = 0, binding = 1) uniform SkyboxData
@@ -49,13 +64,23 @@ layout(set = 1, binding = 0) uniform samplerCube globalTexturesCube[];
 //Write only image do not need formatting in layout.
 layout(set = 1, binding = 1) writeonly uniform image2D globalImages2D[];
 
-
 layout (location = 0) out vec3 dir;
+
+layout(scalar, push_constant) uniform entityIndex
+{
+    SceneBufferData sceneBufferReference;
+};
 
 void main()
 {
+	mat4 viewProject = sceneBufferReference.sceneData.viewPerspective;
+	viewProject[3][0] = 0;
+	viewProject[3][1] = 0;
+	viewProject[3][2] = 0;
+	viewProject[3][3] = 1;
+
 	int idx = indices[gl_VertexIndex];
-    vec4 pos = viewPerspective * vec4(pos[idx], 1.0);
+    vec4 pos = viewProject * vec4(pos[idx], 1.0);
 	dir = pos.xyz;
     gl_Position = pos.xyww;
 }

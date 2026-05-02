@@ -3,7 +3,7 @@
 #include "Foundation/Memory.hpp"
 #include "Foundation/File.hpp"
 
-void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout)
+void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, DescriptorSetLayoutHandle descriptorSetLayout)
 {
     allocator = inAllocator;
 
@@ -14,8 +14,8 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, BufferHandle 
     models.init(allocator, 3, 3);
     debugModels.init(allocator, 1, 1);
 
-    models[rockModelIndex].loadModel("Assets/Models/out/rock.glb", gpu, sceneBuffer, descriptorSetLayout);
-    models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, sceneBuffer, descriptorSetLayout);
+    models[rockModelIndex].loadModel("Assets/Models/out/rock.glb", gpu, descriptorSetLayout);
+    models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, descriptorSetLayout);
 
     debugModels[debugSphereIndex].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
 

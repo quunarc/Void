@@ -33,14 +33,13 @@ namespace
 {
     //TODO: Figure out if you need this stuff.
     PipelineHandle cubePipeline;
-    PipelineHandle skyboxPipeline;
+    //PipelineHandle skyboxPipeline;
     PipelineHandle debugPipeline;
-    BufferHandle sceneBuffer;
-    BufferHandle skyboxUniformBuffer;
+    //BufferHandle skyboxUniformBuffer;
     BufferHandle skyboxMaterialBuffer;
     DescriptorSetLayoutHandle mainDescriptorSetLayout;
-    DescriptorSetLayoutHandle skyboxDescriptorSetLayout;
-    DescriptorSetHandle skyboxDescriptorSet;
+    //DescriptorSetLayoutHandle skyboxDescriptorSetLayout;
+    //DescriptorSetHandle skyboxDescriptorSet;
 
     BufferHandle positionalBuffer;
     BufferHandle debugRendererDataBuffer;
@@ -185,7 +184,7 @@ int main(int argc, char** argv)
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation cubeRLLCreation{};
-    cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "LocalConstants" })
+    cubeRLLCreation
         .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
         .setSetIndex(0);
     cubeRLLCreation.bindless = false;
@@ -199,34 +198,34 @@ int main(int argc, char** argv)
 
     cubePipeline = gpu.createPipeline(pipelineCreation);
 
-    //Depth
-    PipelineCreation skyboxPipelineCreation{};
-    skyboxPipelineCreation.depthStencil.depthEnable = false;
+    ////Depth
+    //PipelineCreation skyboxPipelineCreation{};
+    //skyboxPipelineCreation.depthStencil.depthEnable = false;
 
-    //Shader state
-    FileReadResult vertSkybox = fileReadBinary("Assets/Shaders/skybox.vert.spv", &MemoryService::instance()->scratchAllocator);
-    FileReadResult fragSkybox = fileReadBinary("Assets/Shaders/skybox.frag.spv", &MemoryService::instance()->scratchAllocator);
+    ////Shader state
+    //FileReadResult vertSkybox = fileReadBinary("Assets/Shaders/skybox.vert.spv", &MemoryService::instance()->scratchAllocator);
+    //FileReadResult fragSkybox = fileReadBinary("Assets/Shaders/skybox.frag.spv", &MemoryService::instance()->scratchAllocator);
 
-    skyboxPipelineCreation.shaders.setName("skybox")
-        .addStage(vertSkybox.data, uint32_t(vertSkybox.size), VK_SHADER_STAGE_VERTEX_BIT)
-        .addStage(fragSkybox.data, uint32_t(fragSkybox.size), VK_SHADER_STAGE_FRAGMENT_BIT)
-        .setSPVInput(true);
+    //skyboxPipelineCreation.shaders.setName("skybox")
+    //    .addStage(vertSkybox.data, uint32_t(vertSkybox.size), VK_SHADER_STAGE_VERTEX_BIT)
+    //    .addStage(fragSkybox.data, uint32_t(fragSkybox.size), VK_SHADER_STAGE_FRAGMENT_BIT)
+    //    .setSPVInput(true);
 
-    //Descriptor set layout.
-    DescriptorSetLayoutCreation skyboxSetLayout{};
-    skyboxSetLayout.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
-        .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "SkyboxMaterial" })
-        .setSetIndex(0);
-    skyboxSetLayout.bindless = false;
+    ////Descriptor set layout.
+    //DescriptorSetLayoutCreation skyboxSetLayout{};
+    //skyboxSetLayout
+    //    .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "SkyboxMaterial" })
+    //    .setSetIndex(0);
+    //skyboxSetLayout.bindless = false;
 
-    //Setting it into pipeline.
-    //This descriptor set layout will be ran every draw calls
-    skyboxDescriptorSetLayout = gpu.createDescriptorSetLayout(skyboxSetLayout);
-    //This descriptor set layout will be ran every frame
-    skyboxPipelineCreation.addDescriptorSetLayout(skyboxDescriptorSetLayout)
-        .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
+    ////Setting it into pipeline.
+    ////This descriptor set layout will be ran every draw calls
+    ////skyboxDescriptorSetLayout = gpu.createDescriptorSetLayout(skyboxSetLayout);
+    ////This descriptor set layout will be ran every frame
+    //skyboxPipelineCreation//.addDescriptorSetLayout(skyboxDescriptorSetLayout)
+    //    .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
 
-    skyboxPipeline = gpu.createPipeline(skyboxPipelineCreation);
+    //skyboxPipeline = gpu.createPipeline(skyboxPipelineCreation);
 
     //Debug renderer
     PipelineCreation debugPipelineCreation{};
@@ -243,13 +242,6 @@ int main(int argc, char** argv)
         .setSPVInput(true);
 
     debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ false);
-
-    //Constant buffer
-    BufferCreation uniformBufferCreation;
-    uniformBufferCreation.reset()
-        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
-        .setName("sceneBuffer");
-    sceneBuffer = gpu.createBuffer(uniformBufferCreation);
 
     Array<const char*> cubemapsImage;
     cubemapsImage.init(allocator, 6);
@@ -280,7 +272,7 @@ int main(int argc, char** argv)
     physics.initPhysics();
 
     Scene scene;
-    scene.initScene(allocator, gpu, sceneBuffer, mainDescriptorSetLayout);
+    scene.initScene(allocator, gpu, mainDescriptorSetLayout);
     scene.buildScene(physics);
 
     // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
@@ -308,22 +300,22 @@ int main(int argc, char** argv)
         .setName("debugRenderer");
     debugGlobalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
-    bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SkyboxData))
-        .setName("SkyboxData");
-    skyboxMaterialBuffer = gpu.createBuffer(bufferCreation);
+    //bufferCreation.reset()
+    //    .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SkyboxData))
+    //    .setName("SkyboxData");
+    //skyboxMaterialBuffer = gpu.createBuffer(bufferCreation);
 
-    bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
-        .setName("skyboxUniformDescriptor");
-    skyboxUniformBuffer = gpu.createBuffer(bufferCreation);
+    //bufferCreation.reset()
+    //    .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
+    //    .setName("skyboxUniformDescriptor");
+    //skyboxUniformBuffer = gpu.createBuffer(bufferCreation);
 
-    DescriptorSetCreation dsCreation{};
-    dsCreation.buffer(skyboxUniformBuffer, 0);
-    dsCreation.buffer(skyboxMaterialBuffer, 1);
-    dsCreation.setLayout(skyboxDescriptorSetLayout);
+    //DescriptorSetCreation dsCreation{};
+    //dsCreation.buffer(skyboxUniformBuffer, 0);
+    //dsCreation.buffer(skyboxMaterialBuffer, 1);
+    //dsCreation.setLayout(skyboxDescriptorSetLayout);
 
-    skyboxDescriptorSet = gpu.createDescriptorSet(dsCreation);
+    //skyboxDescriptorSet = gpu.createDescriptorSet(dsCreation);
 
     int64_t beginFrameTick = timeNow();
 
@@ -335,15 +327,6 @@ int main(int argc, char** argv)
 
     float modelScale = 0.1f;
     bool fullscreen = false;
-
-    MapBufferParameters skyboxCBMap = { .buffer = skyboxUniformBuffer, .offset = 0, .size = 0 };
-    void* skyboxCBData = gpu.mapBuffer(skyboxCBMap);
-
-    MapBufferParameters cbMap = { .buffer = sceneBuffer, .offset = 0, .size = 0 };
-    void* cbData = gpu.mapBuffer(cbMap);
-
-    MapBufferParameters skyboxMaterialMap = { .buffer = skyboxMaterialBuffer, .offset = 0, .size = 0 };
-    SkyboxData* skyboxMaterialBufferData = static_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
 
     bool debugRenderer = true;
     UniformData globalDebugData{};
@@ -370,6 +353,8 @@ int main(int argc, char** argv)
             {
                 continue;
             }
+
+            mat4s globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
 
             if (Window::instance()->resizeRequested)
             {
@@ -426,57 +411,44 @@ int main(int argc, char** argv)
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
 
-            //Skybox!
-            gpuCommands->bindPipeline(skyboxPipeline);
+            ////Skybox!
+            //gpuCommands->bindPipeline(skyboxPipeline);
 
-            //Update the perspective matrix for the skybox.
-            if (skyboxCBData)
-            {
-                //TODO: Match these name with what's in the shader.
-                UniformData uniformData{};
-                uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
-                //It needs to have no translation.
-                uniformData.viewPerspective.m30 = 0;
-                uniformData.viewPerspective.m31 = 0;
-                uniformData.viewPerspective.m32 = 0;
-                uniformData.viewPerspective.m33 = 1;
-                memcpy(skyboxCBData, &uniformData, sizeof(UniformData));
-            }
+            ////Update the perspective matrix for the skybox.
+            //Buffer* skyboxUniformDataBuffer = gpu.accessBuffer(skyboxUniformBuffer);
 
-            //Maybe we can make this non-dymanic after things are working?
-            if (skyboxMaterialBufferData)
-            {
-                SkyboxData skyboxData{};
-                skyboxData.skyboxTextureIndex = skyboxTextureHandle.index;
-                skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
-                memcpy(skyboxMaterialBufferData, &skyboxData, sizeof(SkyboxData));
-            }
+            ////TODO: Match these name with what's in the shader.
+            //UniformData uniformData{};
+            //uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+            ////It needs to have no translation.
+            //uniformData.viewPerspective.m30 = 0;
+            //uniformData.viewPerspective.m31 = 0;
+            //uniformData.viewPerspective.m32 = 0;
+            //uniformData.viewPerspective.m33 = 1;
 
-            gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
-            gpuCommands->bindlessDescriptorSet(1);
+            //vmaCopyMemoryToAllocation(gpu.VMAAllocator, &uniformData, skyboxUniformDataBuffer->vmaAllocation, 0, sizeof(UniformData));
 
-            gpuCommands->draw(36, 1, 0, 0);
+            ////Maybe we can make this non-dymanic after things are working?
+            ////skyboxMaterialBuffer
+            //Buffer* skyboxMaterialDataBuffer = gpu.accessBuffer(skyboxMaterialBuffer);
+
+            //SkyboxData skyboxData{};
+            //skyboxData.skyboxTextureIndex = skyboxTextureHandle.index;
+            //skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
+
+            //vmaCopyMemoryToAllocation(gpu.VMAAllocator, &skyboxData, skyboxUniformDataBuffer->vmaAllocation, 0, sizeof(SkyboxData));
+
+            //vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+            //gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
+            //gpuCommands->bindlessDescriptorSet(1);
+
+            //gpuCommands->draw(36, 1, 0, 0);
 
             //Scene
             gpuCommands->bindPipeline(cubePipeline);
 
             gpuCommands->bindlessDescriptorSet(1);
-
-            //Update rotating cube data.
-            mat4s globalModel{};
-            if (cbData)
-            {
-                globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
-
-                //TODO: Match these name with what's in the shader.
-                UniformData uniformData{};
-                uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
-                uniformData.globalModel = globalModel;
-                uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
-                uniformData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
-
-                memcpy(cbData, &uniformData, sizeof(UniformData));
-            }
 
             Buffer* positionBuff = gpu.accessBuffer(positionalBuffer);
             pushConstants.modelPositionAddress = positionBuff->bufferAddress;
@@ -489,6 +461,8 @@ int main(int argc, char** argv)
 
             globalDebugData.globalModel = globalModel;
             globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+            globalDebugData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
+            globalDebugData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
 
@@ -522,7 +496,7 @@ int main(int argc, char** argv)
                     Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
@@ -554,7 +528,6 @@ int main(int argc, char** argv)
                 Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer);
                 pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
 
-                globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
                 globalDebugData.globalModel = globalModel;
                 globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
 
@@ -586,7 +559,7 @@ int main(int argc, char** argv)
                     Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
 
@@ -623,15 +596,11 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    gpu.unmapBuffer(cbMap);
-    gpu.unmapBuffer(skyboxMaterialMap);
-    gpu.unmapBuffer(skyboxCBMap);
-
     gpu.destroyBuffer(positionalBuffer);
 
-    gpu.destroyDescriptorSet(skyboxDescriptorSet);
-    gpu.destroyBuffer(skyboxMaterialBuffer);
-    gpu.destroyBuffer(skyboxUniformBuffer);
+    //gpu.destroyDescriptorSet(skyboxDescriptorSet);
+    //gpu.destroyBuffer(skyboxMaterialBuffer);
+    //gpu.destroyBuffer(skyboxUniformBuffer);
     gpu.destroyBuffer(debugRendererDataBuffer);
     gpu.destroyBuffer(debugGlobalBuffer);
     //gpu.destroyBuffer(debugModelBuffer);
@@ -641,11 +610,10 @@ int main(int argc, char** argv)
     gpu.destroySampler(skyboxSampler);
     gpu.destroyTexture(skyboxTextureHandle);
 
-    gpu.destroyBuffer(sceneBuffer);
     gpu.destroyDescriptorSetLayout(mainDescriptorSetLayout);
-    gpu.destroyDescriptorSetLayout(skyboxDescriptorSetLayout);
+    //gpu.destroyDescriptorSetLayout(skyboxDescriptorSetLayout);
     gpu.destroyPipeline(cubePipeline);
-    gpu.destroyPipeline(skyboxPipeline);
+    //gpu.destroyPipeline(skyboxPipeline);
     gpu.destroyPipeline(debugPipeline);
 
     imgui->shutdown();
