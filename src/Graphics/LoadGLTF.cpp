@@ -169,6 +169,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
     {
         cgltf_image image = cgltfData->images[imageIndex];
 
+        stbi_set_flip_vertically_on_load(0);
         if (image.uri != nullptr)
         {
             TextureHandle textureResource;

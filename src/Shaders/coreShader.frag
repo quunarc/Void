@@ -9,6 +9,8 @@
 struct SceneData
 {
     mat4 viewPerspective;
+    mat4 view;
+    mat4 project;
     mat4 globalModel;
     vec4 eye;
     vec4 light;
@@ -229,8 +231,8 @@ void main()
     float dDenom = (NdotH * alphaSquared - NdotH) * NdotH + 1.0;
     float distribution = (alphaSquared) / (PI * dDenom * dDenom);
 
-    float lightRange = 50.f;
-    float lightIntensity = 150.f;
+    float lightRange = 5000.f;
+    float lightIntensity = 15000.f;
 
     float NdotV = abs(dot(N, V)) + 1e-5;
     float NdotL = clamp(dot(N, L), 0, 1);

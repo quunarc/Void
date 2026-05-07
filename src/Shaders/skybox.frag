@@ -9,6 +9,8 @@
 struct SceneData
 {
     mat4 viewPerspective;
+    mat4 view;
+    mat4 project;
     mat4 globalModel;
     vec4 eye;
     vec4 light;
@@ -48,5 +50,6 @@ layout(scalar, push_constant) uniform entityIndex
 void main()
 {
 	fragColour = texture(globalTexturesCube[nonuniformEXT(skyboxTextureIndex)], dir);
+	//fragColour = texture(globalTextures[nonuniformEXT(skyboxTextureIndex)], vec2(dir.x, dir.y));
 	//fragColour = vec4(testColour, 1.0);
 }

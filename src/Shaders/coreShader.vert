@@ -25,6 +25,8 @@ struct ModelPosition
 struct SceneData
 {
     mat4 viewPerspective;
+    mat4 view;
+    mat4 project;
     mat4 globalModel;
     vec4 eye;
     vec4 light;
@@ -79,7 +81,7 @@ void main()
                          vertexDataReference.vertexData[gl_VertexIndex].py, 
                          vertexDataReference.vertexData[gl_VertexIndex].pz);
 
-    vec4 tagent = vec4(int(vertexDataReference.vertexData[gl_VertexIndex].tx), 
+    vec4 tangent = vec4(int(vertexDataReference.vertexData[gl_VertexIndex].tx), 
                        int(vertexDataReference.vertexData[gl_VertexIndex].ty), 
                        int(vertexDataReference.vertexData[gl_VertexIndex].tz), 
                        int(vertexDataReference.vertexData[gl_VertexIndex].tw)) / 127.f - 1.0;
@@ -96,6 +98,6 @@ void main()
     vTexcoord0 = texcoord;
     vNormal = mat3(modelInv) * normal;
 
-    vTangent = tagent;
+    vTangent = tangent;
     vColour = vec4(1.f, 1.f, 1.f, 1.f);//modelPositionsReference.modelPositions[2].colour;
 }

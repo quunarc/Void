@@ -54,6 +54,8 @@ namespace
     struct UniformData
     {
         mat4s viewPerspective;
+        mat4s view;
+        mat4s project;
         mat4s globalModel;
         vec4s eye;
         vec4s light;
@@ -96,10 +98,8 @@ namespace
     static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
 
     //TODO: Move this to a place that make sense.
-    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, const char* name)
+    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, Array<uint8_t*> &skyboxImageArray, const char* name)
     {
-        Array<uint8_t*> skyboxImageArray;
-        skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
         int comp;
         int width;
         int height;
@@ -108,6 +108,7 @@ namespace
         {
             if (images[i])
             {
+                stbi_set_flip_vertically_on_load(1);
                 //Load 6 images.
                 uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 4);
                 if (imageData == nullptr)
@@ -117,7 +118,7 @@ namespace
                 }
 
                 skyboxImageArray.push(imageData);
-                free(imageData);
+                //free(imageData);
             }
         }
 
@@ -129,9 +130,8 @@ namespace
             .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(width), 1)
             .setName(name);
         creation.layerCount = 6;
-        TextureHandle newTexture = gpu.createTexture(creation);
+        TextureHandle newTexture = gpu.createTextureTEMP(creation, skyboxImageArray);
 
-        skyboxImageArray.shutdown();
         return newTexture;
     }
 }
@@ -206,7 +206,7 @@ int main(int argc, char** argv)
 
     //Depth
     PipelineCreation skyboxPipelineCreation{};
-    skyboxPipelineCreation.depthStencil.depthEnable = false;
+    skyboxPipelineCreation.depthStencil.depthEnable = true;
     skyboxPipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
     //Shader state
@@ -250,22 +250,25 @@ int main(int argc, char** argv)
 
     debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ false);
 
+    Array<uint8_t*> skyboxImageArray;
+    skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
+
     Array<const char*> cubemapsImage;
     cubemapsImage.init(allocator, 6);
-    cubemapsImage.push("Assets/Textures/1.png");
-    cubemapsImage.push("Assets/Textures/2.png");
-    cubemapsImage.push("Assets/Textures/3.png");
     cubemapsImage.push("Assets/Textures/4.png");
-    cubemapsImage.push("Assets/Textures/5.png");
+    cubemapsImage.push("Assets/Textures/2.png");
     cubemapsImage.push("Assets/Textures/6.png");
+    cubemapsImage.push("Assets/Textures/5.png");
+    cubemapsImage.push("Assets/Textures/1.png");
+    cubemapsImage.push("Assets/Textures/3.png");
 
-    TextureHandle skyboxTextureHandle = createACubemap(gpu, cubemapsImage, "SpaceCubeMap");
+    TextureHandle skyboxTextureHandle = createACubemap(gpu, cubemapsImage, skyboxImageArray, "SpaceCubeMap");
     SamplerCreation skyboxSamplerCreation{};
     skyboxSamplerCreation.minFilter = VK_FILTER_LINEAR;
     skyboxSamplerCreation.magFilter = VK_FILTER_LINEAR;
-    skyboxSamplerCreation.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    skyboxSamplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    skyboxSamplerCreation.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    skyboxSamplerCreation.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    skyboxSamplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    skyboxSamplerCreation.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     SamplerHandle skyboxSampler = gpu.createSampler(skyboxSamplerCreation);
     gpu.linkTextureSampler(skyboxTextureHandle, skyboxSampler);
 
@@ -326,7 +329,7 @@ int main(int argc, char** argv)
     gameCamera.internal3DCamera.initPerspective(0.01f, 5000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
     gameCamera.init(7.f, 3.0f, 0.1f);
 
-    float modelScale = 0.1f;
+    float modelScale = 1.0f;
     bool fullscreen = false;
 
     bool debugRenderer = true;
@@ -418,6 +421,8 @@ int main(int argc, char** argv)
             pushConstants.modelPositionAddress = 0;
 
             globalDebugData.globalModel = globalModel;
+            globalDebugData.view = gameCamera.internal3DCamera.view;
+            globalDebugData.project = gameCamera.internal3DCamera.projection;
             globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
             globalDebugData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
             globalDebugData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
@@ -587,6 +592,8 @@ int main(int argc, char** argv)
     }
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
+
+    skyboxImageArray.shutdown();
 
     gpu.destroyBuffer(positionalBuffer);
 

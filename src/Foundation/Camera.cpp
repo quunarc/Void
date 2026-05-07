@@ -108,6 +108,8 @@ void Camera::calculateProjectionMatrix()
     if (perspective) 
     {
         projection = glms_perspective(glm_rad(fieldOfView), aspectRatio, 1000.f, 0.01f);
+        projection.m22 = 0.0f;
+        projection.m23 = -1.0f;
     }
     else 
     {

@@ -54,7 +54,7 @@ void Scene::buildScene(Physics& physics)
 
     srand(time(0));
 
-    float sceneRadius = 1000.f;
+    float sceneRadius = 5000.f;
     for (uint32_t i = 2; i < totalEntities; ++i)
     {
         vec3s position;

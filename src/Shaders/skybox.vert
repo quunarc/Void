@@ -14,6 +14,43 @@ const vec3 pos[8] = vec3[8]
 	vec3( 1.0,-1.0,-1.0),
 	vec3( 1.0, 1.0,-1.0),
 	vec3(-1.0, 1.0,-1.0)
+
+//    vec3(-1.0f,  1.0f, -1.0f),
+//    vec3(-1.0f, -1.0f, -1.0f),
+//    vec3( 1.0f, -1.0f, -1.0f),
+//    vec3( 1.0f, -1.0f, -1.0f),
+//    vec3( 1.0f,  1.0f, -1.0f),
+//    vec3(-1.0f,  1.0f, -1.0f),
+//    vec3(-1.0f, -1.0f,  1.0f),
+//    vec3(-1.0f, -1.0f, -1.0f),
+//    vec3(-1.0f,  1.0f, -1.0f),
+//    vec3(-1.0f,  1.0f, -1.0f),
+//    vec3(-1.0f,  1.0f,  1.0f),
+//    vec3(-1.0f, -1.0f,  1.0f),
+//    vec3( 1.0f, -1.0f, -1.0f),
+//    vec3( 1.0f, -1.0f,  1.0f),
+//    vec3( 1.0f,  1.0f,  1.0f),
+//    vec3( 1.0f,  1.0f,  1.0f),
+//    vec3( 1.0f,  1.0f, -1.0f),
+//    vec3( 1.0f, -1.0f, -1.0f),
+//    vec3(-1.0f, -1.0f,  1.0f),
+//    vec3(-1.0f,  1.0f,  1.0f),
+//    vec3( 1.0f,  1.0f,  1.0f),
+//    vec3( 1.0f,  1.0f,  1.0f),
+//    vec3( 1.0f, -1.0f,  1.0f),
+//    vec3(-1.0f, -1.0f,  1.0f),
+//    vec3(-1.0f,  1.0f, -1.0f),
+//    vec3( 1.0f,  1.0f, -1.0f),
+//    vec3( 1.0f,  1.0f,  1.0f),
+//    vec3( 1.0f,  1.0f,  1.0f),
+//    vec3(-1.0f,  1.0f,  1.0f),
+//    vec3(-1.0f,  1.0f, -1.0f),
+//    vec3(-1.0f, -1.0f, -1.0f),
+//    vec3(-1.0f, -1.0f,  1.0f),
+//    vec3( 1.0f, -1.0f, -1.0f),
+//    vec3( 1.0f, -1.0f, -1.0f),
+//    vec3(-1.0f, -1.0f,  1.0f),
+//    vec3( 1.0f, -1.0f,  1.0f)
 );
 
 const int indices[36] = int[36]
@@ -29,6 +66,8 @@ const int indices[36] = int[36]
 struct SceneData
 {
     mat4 viewPerspective;
+	mat4 view;
+    mat4 project;
     mat4 globalModel;
     vec4 eye;
     vec4 light;
@@ -92,11 +131,15 @@ void main()
 	viewProject[3][2] = 0;
 	viewProject[3][3] = 1;
 
-	//mat4 viewP = mat4(mat3(viewProject));
+	mat4 currentView = sceneBufferReference.sceneData.view;
+//	currentView[3][0] = 0;
+//	currentView[3][1] = 0;
+//	currentView[3][2] = 0;
+//	currentView[3][3] = 1;
+	mat4 view = mat4(mat3(sceneBufferReference.sceneData.view));
 
 	int idx = indices[gl_VertexIndex];
-    vec4 pos = viewProject * vec4(pos[idx], 1.0);
-	dir = pos.xyz;
-    //gl_Position = pos.xyww;
-	gl_Position = vec4(pos.x, pos.y, 0.f, pos.w);
+    vec4 pos1 = sceneBufferReference.sceneData.project * view * vec4(pos[idx], 1.0);
+	dir = pos[idx];
+	gl_Position = vec4(pos1.x, pos1.y, 0.f, pos1.w);
 }
