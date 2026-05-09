@@ -373,20 +373,20 @@ int main(int argc, char** argv)
                 debugRenderer = !debugRenderer;
             }
 
-            //NOTE: This must be after the OS messages.
-            imgui->newFrame();
+            ////NOTE: This must be after the OS messages.
+            //imgui->newFrame();
 
-            if (ImGui::Begin("Void ImGui"))
-            {
-                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            }
-            ImGui::End();
+            //if (ImGui::Begin("Void ImGui"))
+            //{
+            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            //}
+            //ImGui::End();
 
-            if (ImGui::Begin("GPU"))
-            {
-                gpuProfiler.imguiDraw();
-            }
-            ImGui::End();
+            //if (ImGui::Begin("GPU"))
+            //{
+            //    gpuProfiler.imguiDraw();
+            //}
+            //ImGui::End();
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -445,12 +445,30 @@ int main(int argc, char** argv)
             {
                 const Entity& entity = scene.entities[entityIndex];
 
-                if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
+                if (entity.isPlayer == false)
                 {
+                    if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
+                    {
+                        EntityData physicsPosition{};
+                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
+                        physicsPosition.pos = convertToMat4(newPos);
+                        physicsPosition.colour = scene.entityData[entityIndex].colour;
+
+                        physicsUpdateDataArray.push(physicsPosition);
+                    }
+                }
+                else 
+                {
+                    JPH::RVec3Arg playerPosition{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y - 3.f, gameCamera.internal3DCamera.position.z - 15.f };
+                    JPH::QuatArg playerRotation{ gameCamera.internal3DCamera.rotation.x, gameCamera.internal3DCamera.rotation.y, gameCamera.internal3DCamera.rotation.z, gameCamera.internal3DCamera.rotation.w };
                     EntityData physicsPosition{};
-                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
-                    physicsPosition.pos = convertToMat4(newPos);
-                    physicsPosition.colour = scene.entityData[entityIndex].colour;
+                    physics.bodyInterface->SetPosition(scene.entities[0].bodyID, playerPosition, JPH::EActivation::Activate);
+                    physics.bodyInterface->SetRotation(scene.entities[0].bodyID, playerRotation, JPH::EActivation::Activate);
+
+                    mat4s playerCamera = glms_mat4_mul(gameCamera.internal3DCamera.view, glms_translate_make({0.f, 9999.f, 9999.f}));
+
+                    physicsPosition.pos = playerCamera;
+                    physicsPosition.colour = scene.entityData[0].colour;
 
                     physicsUpdateDataArray.push(physicsPosition);
                 }
@@ -574,18 +592,18 @@ int main(int argc, char** argv)
 
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
 
-            imgui->render(*gpuCommands);
+            //imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
-            gpuProfiler.update(gpu);
+            //gpuProfiler.update(gpu);
 
             gpu.queueCommandBuffer(gpuCommands);
             gpu.present();
         }
         else
         {
-            ImGui::Render();
+            //ImGui::Render();
         }
 
         //FrameMark;

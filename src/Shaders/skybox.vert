@@ -14,43 +14,6 @@ const vec3 pos[8] = vec3[8]
 	vec3( 1.0,-1.0,-1.0),
 	vec3( 1.0, 1.0,-1.0),
 	vec3(-1.0, 1.0,-1.0)
-
-//    vec3(-1.0f,  1.0f, -1.0f),
-//    vec3(-1.0f, -1.0f, -1.0f),
-//    vec3( 1.0f, -1.0f, -1.0f),
-//    vec3( 1.0f, -1.0f, -1.0f),
-//    vec3( 1.0f,  1.0f, -1.0f),
-//    vec3(-1.0f,  1.0f, -1.0f),
-//    vec3(-1.0f, -1.0f,  1.0f),
-//    vec3(-1.0f, -1.0f, -1.0f),
-//    vec3(-1.0f,  1.0f, -1.0f),
-//    vec3(-1.0f,  1.0f, -1.0f),
-//    vec3(-1.0f,  1.0f,  1.0f),
-//    vec3(-1.0f, -1.0f,  1.0f),
-//    vec3( 1.0f, -1.0f, -1.0f),
-//    vec3( 1.0f, -1.0f,  1.0f),
-//    vec3( 1.0f,  1.0f,  1.0f),
-//    vec3( 1.0f,  1.0f,  1.0f),
-//    vec3( 1.0f,  1.0f, -1.0f),
-//    vec3( 1.0f, -1.0f, -1.0f),
-//    vec3(-1.0f, -1.0f,  1.0f),
-//    vec3(-1.0f,  1.0f,  1.0f),
-//    vec3( 1.0f,  1.0f,  1.0f),
-//    vec3( 1.0f,  1.0f,  1.0f),
-//    vec3( 1.0f, -1.0f,  1.0f),
-//    vec3(-1.0f, -1.0f,  1.0f),
-//    vec3(-1.0f,  1.0f, -1.0f),
-//    vec3( 1.0f,  1.0f, -1.0f),
-//    vec3( 1.0f,  1.0f,  1.0f),
-//    vec3( 1.0f,  1.0f,  1.0f),
-//    vec3(-1.0f,  1.0f,  1.0f),
-//    vec3(-1.0f,  1.0f, -1.0f),
-//    vec3(-1.0f, -1.0f, -1.0f),
-//    vec3(-1.0f, -1.0f,  1.0f),
-//    vec3( 1.0f, -1.0f, -1.0f),
-//    vec3( 1.0f, -1.0f, -1.0f),
-//    vec3(-1.0f, -1.0f,  1.0f),
-//    vec3( 1.0f, -1.0f,  1.0f)
 );
 
 const int indices[36] = int[36]
@@ -125,17 +88,7 @@ layout(scalar, push_constant) uniform entityIndex
 
 void main()
 {
-	mat4 viewProject = sceneBufferReference.sceneData.viewPerspective;
-	viewProject[3][0] = 0;
-	viewProject[3][1] = 0;
-	viewProject[3][2] = 0;
-	viewProject[3][3] = 1;
-
 	mat4 currentView = sceneBufferReference.sceneData.view;
-//	currentView[3][0] = 0;
-//	currentView[3][1] = 0;
-//	currentView[3][2] = 0;
-//	currentView[3][3] = 1;
 	mat4 view = mat4(mat3(sceneBufferReference.sceneData.view));
 
 	int idx = indices[gl_VertexIndex];

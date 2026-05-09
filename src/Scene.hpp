@@ -53,6 +53,7 @@ namespace
         JPH::Shape* shape;
 
         bool isDynamic;
+        bool isPlayer = false;
     };
 
     inline mat4s convertToMat4(JPH::RMat44& jphMat) 
@@ -101,7 +102,7 @@ struct Scene
     void initScene(HeapAllocator* inAllocator, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout);
     void buildScene(Physics& physics);
     void buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, uint32_t debugModelIndex, const vec3s& position, vec3s axis,
-                              float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour);
+                              float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour, bool isPlayer = false);
     void buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axis, float angle);
     void shutdownScene(GPUDevice& gpu, Physics& physics);
 

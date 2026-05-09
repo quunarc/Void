@@ -50,6 +50,4 @@ layout(scalar, push_constant) uniform entityIndex
 void main()
 {
 	fragColour = texture(globalTexturesCube[nonuniformEXT(skyboxTextureIndex)], dir);
-	//fragColour = texture(globalTextures[nonuniformEXT(skyboxTextureIndex)], vec2(dir.x, dir.y));
-	//fragColour = vec4(testColour, 1.0);
 }
