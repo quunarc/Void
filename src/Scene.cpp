@@ -11,7 +11,7 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, DescriptorSet
     entityData.init(allocator, totalEntities, totalEntities);
     debugRendererData.init(allocator, totalEntities, totalEntities);
     bodiesToBeAdded.init(allocator, totalEntities);
-    models.init(allocator, 3, 3);
+    models.init(allocator, 2, 2);
     debugModels.init(allocator, 1, 1);
 
     models[rockModelIndex].loadModel("Assets/Models/out/rock.glb", gpu, descriptorSetLayout);
@@ -31,7 +31,7 @@ void Scene::buildScene(Physics& physics)
     JPH::ShapeSettings::ShapeResult duckShapeResult = duckSphereSettings.Create();
     JPH::ShapeRefC duckShapeRef = duckShapeResult.Get();
 
-    JPH::SphereShapeSettings playerSphereSettings{ 0.5f };
+    JPH::SphereShapeSettings playerSphereSettings{ 1.0f };
     playerSphereSettings.SetEmbedded();
 
     JPH::ShapeSettings::ShapeResult playerShapeResult = playerSphereSettings.Create();
@@ -68,7 +68,7 @@ void Scene::buildScene(Physics& physics)
 
     srand(time(0));
 
-    float sceneRadius = 5000.f;
+    float sceneRadius = 1000.f;
     for (uint32_t i = 3; i < totalEntities; ++i)
     {
         vec3s position;

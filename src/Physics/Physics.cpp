@@ -77,6 +77,11 @@ static bool AssertFailedImpl(const char* inExpression, const char* inMessage, co
 
 #endif // JPH_ENABLE_ASSERTS
 
+Physics::Physics() 
+{
+    initPhysics();
+}
+
 void Physics::initPhysics()
 {
     // Install trace and assert callbacks
@@ -91,13 +96,6 @@ void Physics::initPhysics()
     // If you have your own custom shape types you probably need to register their handlers with the CollisionDispatch before calling this function.
     // If you implement your own default material (PhysicsMaterial::sDefault) make sure to initialize it before this function or else this function will create one for you.
     JPH::RegisterTypes();
-
-    // We need a temp allocator for temporary allocations during the physics update. We're
-    // pre-allocating 10 MB to avoid having to do allocations during the physics update.
-    // B.t.w. 10 MB is way too much for this example but it is a typical value you can use.
-    // If you don't want to pre-allocate you can also use TempAllocatorMalloc to fall back to
-    // malloc / free.
-    //tempAllocator.Init(10 * 1024 * 1024);
 
     // We need a job system that will execute physics jobs on multiple threads. Typically
     // you would implement the JobSystem interface yourself and let Jolt Physics run on top

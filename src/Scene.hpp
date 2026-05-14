@@ -87,12 +87,21 @@ namespace
         return positionMatrix;
     }
 
-    inline vec3s convertToVec3(JPH::Vec3& jphVec3) 
+    inline vec3s convertToVec3(const JPH::Vec3& jphVec3) 
     {
         vec3s vector;
         vector.x = jphVec3.GetX();
         vector.y = jphVec3.GetY();
         vector.z = jphVec3.GetZ(); 
+        return vector;
+    }
+
+    inline JPH::Vec3 convertToVec3JPH(const vec3s& vec)
+    {
+        JPH::Vec3 vector;
+        vector.SetX(vec.x);
+        vector.SetY(vec.y);
+        vector.SetZ(vec.z);
         return vector;
     }
 }

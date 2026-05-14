@@ -12,6 +12,7 @@
 #include "cglm/struct/mat4.h"
 #include "cglm/struct/quat.h"
 #include "cglm/struct/affine.h"
+#include "cglm/struct/cam.h"
 
 #include "vender/imgui/imgui.h"
 //#include "vender/tracy/tracy/Tracy.hpp"
@@ -22,6 +23,7 @@
 #include "Foundation/Array.hpp"
 
 #include "Physics/Physics.hpp"
+#include "Player.hpp"
 
 #include "Scene.hpp"
 
@@ -139,7 +141,7 @@ namespace
 int main(int argc, char** argv)
 {
     //Init services
-    MemoryService::instance()->init(void_giga(1ull), void_mega(8));
+    MemoryService::instance()->init(/*heapSize=*/ void_giga(1ull), /*stackSize=*/ void_mega(8), /*physicsStackSiz=*/ void_mega(40));
     timeServiceInit();
 
     HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
@@ -181,12 +183,6 @@ int main(int argc, char** argv)
         .addStage(vertexShaderCode.data, uint32_t(vertexShaderCode.size), VK_SHADER_STAGE_VERTEX_BIT)
         .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
-
-    VkDescriptorType type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
-    uint16_t binding = 0;
-    uint16_t count = 0;
-    VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
-    const char* name = nullptr;
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation cubeRLLCreation{};
@@ -248,7 +244,7 @@ int main(int argc, char** argv)
         .addStage(fragDebug.data, uint32_t(fragDebug.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ false);
+    debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ true);
 
     Array<uint8_t*> skyboxImageArray;
     skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
@@ -278,17 +274,16 @@ int main(int argc, char** argv)
     // This needs to be done before any other Jolt function is called.
     JPH::RegisterDefaultAllocator();
 
-    Physics physics;
-    physics.initPhysics();
+    Physics::instance();
 
     Scene scene;
     scene.initScene(allocator, gpu, mainDescriptorSetLayout);
-    scene.buildScene(physics);
+    scene.buildScene(Physics::instance());
 
     // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
     // You should definitely not call this every frame or when e.g. streaming in a new level section as it is an expensive operation.
     // Instead insert all new objects in batches instead of 1 at a time to keep the broad phase efficient.
-    physics.physicsSystem.OptimizeBroadPhase();
+    Physics::instance().physicsSystem.OptimizeBroadPhase();
 
     PushConstants pushConstants{};
 
@@ -323,7 +318,7 @@ int main(int argc, char** argv)
 
     int64_t beginFrameTick = timeNow();
 
-    vec3s eye = vec3s{ 0.f, 2.5f, 2.f };
+    vec3s eye = vec3s{ 0.f, 1.f, 0.f };
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.01f, 5000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
@@ -331,6 +326,9 @@ int main(int argc, char** argv)
 
     float modelScale = 1.0f;
     bool fullscreen = false;
+
+    Player player;
+    player.init();
 
     bool debugRenderer = true;
     UniformData globalDebugData{};
@@ -368,6 +366,8 @@ int main(int argc, char** argv)
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             }
 
+            player.handleEvents(inputHandler, convertToVec3JPH(gameCamera.internal3DCamera.direction));
+
             if (inputHandler.isKeyJustReleased(Keys::KEY_1))
             {
                 debugRenderer = !debugRenderer;
@@ -398,9 +398,10 @@ int main(int argc, char** argv)
             float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
             beginFrameTick = currentTick;
 
-            physics.updatePhysics(deltaTime);
+            Physics::instance().updatePhysics(deltaTime);
             
-            gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, convertToVec3(player.character->GetPosition()), {0.f, 0.f, 0.f, 0.f}, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
             CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
@@ -450,7 +451,7 @@ int main(int argc, char** argv)
                     if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
                     {
                         EntityData physicsPosition{};
-                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
+                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
                         physicsPosition.pos = convertToMat4(newPos);
                         physicsPosition.colour = scene.entityData[entityIndex].colour;
 
@@ -459,15 +460,10 @@ int main(int argc, char** argv)
                 }
                 else
                 {
-                    JPH::RVec3Arg playerPosition{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y - 3.f, gameCamera.internal3DCamera.position.z - 15.f };
-                    JPH::QuatArg playerRotation{ gameCamera.internal3DCamera.rotation.x, gameCamera.internal3DCamera.rotation.y, gameCamera.internal3DCamera.rotation.z, gameCamera.internal3DCamera.rotation.w };
+                    player.update(deltaTime);
                     EntityData physicsPosition{};
-                    physics.bodyInterface->SetPosition(scene.entities[0].bodyID, playerPosition, JPH::EActivation::Activate);
-                    physics.bodyInterface->SetRotation(scene.entities[0].bodyID, playerRotation, JPH::EActivation::Activate);
-
-                    mat4s playerCamera = glms_mat4_mul(gameCamera.internal3DCamera.view, glms_translate_make({ 0.f, 9999.f, 9999.f }));
-
-                    physicsPosition.pos = playerCamera;
+                    JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(player.character->GetBodyID());
+                    physicsPosition.pos = convertToMat4(newPos);
                     physicsPosition.colour = scene.entityData[0].colour;
 
                     physicsUpdateDataArray.push(physicsPosition);
@@ -531,11 +527,26 @@ int main(int argc, char** argv)
                 for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
                 {
                     const Entity& entity = scene.entities[entityIndex];
-                    if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
+                    if (entity.isPlayer == false)
+                    {
+                        if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
+                        {
+                            DebugRendererData debugRenderData{};
+                            JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
+                            debugRenderData.position = convertToMat4(newPos);
+                            debugRenderData.model = scene.debugRendererData[entityIndex].model;
+                            debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
+
+                            debugRenderingDataArray.push(debugRenderData);
+                        }
+                    }
+                    else 
                     {
                         DebugRendererData debugRenderData{};
-                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
+                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(player.character->GetBodyID());
                         debugRenderData.position = convertToMat4(newPos);
+                        debugRenderData.position.m31 += 0.6f;
+                        debugRenderData.position.m30 += 0.2f;
                         debugRenderData.model = scene.debugRendererData[entityIndex].model;
                         debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
 
@@ -621,7 +632,7 @@ int main(int argc, char** argv)
     gpu.destroyBuffer(debugRendererDataBuffer);
     gpu.destroyBuffer(debugGlobalBuffer);
 
-    scene.shutdownScene(gpu, physics);
+    scene.shutdownScene(gpu, Physics::instance());
 
     gpu.destroySampler(skyboxSampler);
     gpu.destroyTexture(skyboxTextureHandle);

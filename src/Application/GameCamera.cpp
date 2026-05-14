@@ -127,6 +127,35 @@ void GameCamera::update(InputHandler* input, float windowWidth, float windowHeig
     }
 }
 
+void GameCamera::updatePlayerCamera(InputHandler* input, float windowWidth, float windowHeight, const vec3s& position, const versors& rotation, float deltaTime)
+{
+    internal3DCamera.update();
+
+    //Ignore first dragging frames for mouse movement waiting the cursor to be placed at the center of the screen.
+    if (input->isMouseDragging(MOUSE_BUTTON_RIGHT) /*&& !ImGui::IsAnyItemHovered()*/)
+    {
+        if (ignoreDraggingFrames == 0)
+        {
+            targetYaw += (input->mousePosition.x - (windowWidth / 2.f)) * mouseSensitivity * deltaTime;
+            targetPitch += (input->mousePosition.y - (windowHeight / 2.f)) * mouseSensitivity * deltaTime;
+        }
+        else
+        {
+            --ignoreDraggingFrames;
+        }
+        mouseDragging = true;
+    }
+    else
+    {
+        mouseDragging = false;
+        ignoreDraggingFrames = 3;
+    }
+
+    const float tweenSpeed = rotationSpeed * deltaTime;
+    internal3DCamera.rotate((targetPitch - internal3DCamera.pitch) * tweenSpeed, (targetYaw - internal3DCamera.yaw) * tweenSpeed);
+    internal3DCamera.position = glms_vec3_sub(position, glms_vec3_scale(internal3DCamera.direction, -10.f));
+}
+
 void GameCamera::applyJittering(float x, float y) 
 {
     //Reset camera projection

@@ -15,6 +15,7 @@ struct GameCamera
     void reset();
 
     void update(InputHandler* input, float windowWidth, float windowHeight, float deltaTime);
+    void updatePlayerCamera(InputHandler* input, float windowWidth, float windowHeight, const vec3s& position, const versors& rotation, float deltaTime);
     void applyJittering(float x, float y);
 
     Camera internal3DCamera{};

@@ -3,6 +3,7 @@
 
 #include "Foundation/Platform.hpp"
 #include "Foundation/Log.hpp"
+#include "Foundation/Memory.hpp"
 
 #include <Jolt/Jolt.h>
 
@@ -175,9 +176,84 @@ public:
     }
 };
 
+//This is here because we need to have the temporary allocator for the physics.
+//When we are working with jolt we need to use inhertance we can't get around this. We have used a stack allocator instead of a heap based on.
+class JPH_EXPORT PhysicAllocator final : public JPH::TempAllocator
+{
+public:
+    JPH_OVERRIDE_NEW_DELETE
+
+    virtual	~PhysicAllocator() = default;
+
+    explicit PhysicAllocator()
+    {
+        allocator = &MemoryService::instance()->physicsAllocator;
+    }
+
+    virtual void* Allocate(unsigned int inSize) override
+    {
+        //Jolt can allocate "0" piece of memory and this is valid.
+        if (inSize == 0)
+        {
+            return nullptr;
+        }
+
+        return allocator->allocate(inSize * JPH_RVECTOR_ALIGNMENT, JPH_RVECTOR_ALIGNMENT);
+    }
+
+    virtual void Free(void* inAddress, unsigned int inSize) override
+    {
+        if (inAddress == nullptr)
+        {
+            JPH_ASSERT(inSize == 0);
+        }
+        else
+        {
+            allocator->freeMarker(inSize);
+        }
+    }
+
+    //Check if no allocations have been made
+    bool IsEmpty() const
+    {
+        return allocator->allocatedSize == 0;
+    }
+
+    //Get the total size of the fixed buffer
+    size_t GetSize() const
+    {
+        return allocator->totalSize;
+    }
+
+    //Get current usage in bytes of the buffer
+    size_t GetUsage() const
+    {
+        return allocator->allocatedSize;
+    }
+
+    //Check if an allocation of inSize can be made in this fixed buffer allocator
+    bool CanAllocate(unsigned int inSize) const
+    {
+        return allocator->allocatedSize + memoryAlign(inSize, JPH_RVECTOR_ALIGNMENT) <= allocator->totalSize;
+    }
+
+    /// Check if memory block at inAddress is owned by this allocator
+    bool OwnsMemory(const void* inAddress) const
+    {
+        return inAddress >= allocator->memory && inAddress < allocator->memory + allocator->totalSize;
+    }
+
+    StackAllocator* allocator;
+};
 
 struct Physics
 {
+    static Physics& instance() 
+    {
+        static Physics physics;
+        return physics;
+    }
+
     ~Physics() 
     {
         // Unregisters all types with the factory and cleans up the default material
@@ -187,7 +263,7 @@ struct Physics
         delete JPH::Factory::sInstance;
         JPH::Factory::sInstance = nullptr;
     }
-    JPH::TempAllocatorImpl tempAllocator{20 * 1024 * 1024};
+    PhysicAllocator tempAllocator;
 
     // The main way to interact with the bodies in the physics system is through the body interface. There is a locking and a non-locking
     // variant of this. We're going to use the locking version (even though we're not planning to access bodies from multiple threads)
@@ -229,9 +305,17 @@ struct Physics
     // We simulate the physics world in discrete time steps. 60 Hz is a good rate to update the physics system.
     static constexpr float cDeltaTime = 1.0f / 60.0f;
 
-	void initPhysics();
 	void updatePhysics(float delta);
 	void shutdownPhysics();
+
+private:
+    Physics();
+    Physics(const Physics& rhs) = delete;
+    Physics(Physics&& rhs) = delete;
+    void operator=(const Physics& rhs) = delete;
+    void operator=(Physics&& rhs) = delete;
+
+    void initPhysics();
 };
 
 #endif // !PHYSICS_HDR

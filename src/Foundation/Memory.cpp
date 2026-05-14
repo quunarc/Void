@@ -49,16 +49,18 @@ MemoryService* MemoryService::instance()
     return &memoryService;
 }
 
-void MemoryService::init(uint64_t heapSize, uint64_t stackSize)
+void MemoryService::init(uint64_t heapSize, uint64_t stackSize, uint32_t physicsStackSize)
 {
     vprint("Memory Service Init.\n");
     scratchAllocator.init(stackSize != 0 ? stackSize : void_mega(8));
+    physicsAllocator.init(physicsStackSize != 0 ? physicsStackSize : void_mega(8));
     systemAllocator.init(heapSize != 0 ? heapSize : MEMORY_SIZE);
 }
 
 void MemoryService::shutdown()
 {
     scratchAllocator.shutdown();
+    physicsAllocator.shutdown();
     systemAllocator.shutdown();
 
     vprint("Memory Service Shutdown.\n");
@@ -206,6 +208,13 @@ void* HeapAllocator::allocate(size_t size, size_t alignment, const char* file, i
     return allocate(size, alignment);
 }
 
+void* HeapAllocator::reallocate(void* pointer, size_t size) 
+{
+    void* memory = tlsf_realloc(TLSFHandle, pointer, size);
+    vprint("Memory: %p, size %llu \n", memory, size);
+    return memory;
+}
+
 void HeapAllocator::deallocate(void* pointer)
 {
 #if defined (HEAP_ALLOCATOR_STATS)
@@ -239,6 +248,11 @@ void* MallocAllocator::allocate(size_t size, size_t alignment, const char* file,
     return malloc(size);
 }
 
+void* MallocAllocator::reallocate(void* pointer, size_t size)
+{
+    return realloc(pointer, size);
+}
+
 void MallocAllocator::deallocate(void* pointer) 
 {
     free(pointer);
@@ -258,7 +272,7 @@ void StackAllocator::shutdown()
 
 void* StackAllocator::allocate(size_t size, size_t alignment) 
 {
-    VOID_ASSERT(size > 0);                                        
+    VOID_ASSERT(size > 0);                     
                                                                   
     const size_t newStart = memoryAlign(allocatedSize, alignment);
     VOID_ASSERT(newStart < totalSize);                            
@@ -270,13 +284,19 @@ void* StackAllocator::allocate(size_t size, size_t alignment)
         return nullptr;                                           
     }                                                             
                                                                   
-    allocatedSize = newAllocatedSize;                             
-    return memory + newStart;                                     
+    allocatedSize = newAllocatedSize;
+    return memory + newStart;               
 }                                                                 
                                                                   
 void* StackAllocator::allocate(size_t size, size_t alignment, const char* file, int32_t line) 
 {
     return allocate(size, alignment);
+}
+
+void* StackAllocator::reallocate(void* pointer, size_t size)
+{
+    VOID_ERROR("Not implemented");
+    return nullptr;
 }
 
 void StackAllocator::deallocate(void* pointer) 

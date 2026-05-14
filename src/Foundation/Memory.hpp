@@ -31,6 +31,7 @@ struct Allocator
     virtual ~Allocator() = default;
     virtual void* allocate(size_t size, size_t alignment) = 0;
     virtual void* allocate(size_t size, size_t alignment, const char* file, int32_t line) = 0;
+    virtual void* reallocate(void* pointer, size_t size) = 0;
 
     virtual void deallocate(void * pointer) = 0;
 };
@@ -48,6 +49,7 @@ struct HeapAllocator : public Allocator
 
     virtual void* allocate(size_t size, size_t alignment) override;
     virtual void* allocate(size_t size, size_t alignment, const char* file, int32_t line) override;
+    virtual void* reallocate(void* pointer, size_t size) override;
 
     virtual void deallocate(void* pointer) override;
 
@@ -66,6 +68,7 @@ struct StackAllocator : public Allocator
 
     virtual void* allocate(size_t size, size_t alignment) override;
     virtual void* allocate(size_t size, size_t alignment, const char* file, int32_t line) override;
+    virtual void* reallocate(void* pointer, size_t size) override;
 
     virtual void deallocate(void* pointer) override;
 
@@ -88,6 +91,7 @@ struct DoubleStackAllocator : public Allocator
 
     virtual void* allocate(size_t size, size_t alignment) override;
     virtual void* allocate(size_t size, size_t alignment, const char* file, int32_t line) override;
+    virtual void* reallocate(void* pointer, size_t size) override {}
 
     virtual void deallocate(void* pointer) override;
 
@@ -118,7 +122,7 @@ struct MallocAllocator : public Allocator
 {
     virtual void* allocate(size_t size, size_t alignment) override;
     virtual void* allocate(size_t size, size_t alignment, const char* file, int32_t line) override;
-
+    virtual void* reallocate(void* pointer, size_t size) override;
     virtual void deallocate(void* pointer) override;
 };
 
@@ -126,7 +130,7 @@ struct MemoryService
 {
     static MemoryService* instance();
 
-    void init(uint64_t heapSize, uint64_t stackSize);
+    void init(uint64_t heapSize, uint64_t stackSize, uint32_t physicsStackSize);
     void shutdown();
 
 #if defined VOID_IMGUI
@@ -134,6 +138,8 @@ struct MemoryService
 #endif
 
     StackAllocator scratchAllocator{};
+    //The jolt needs a larger sized piece of temporary memory.
+    StackAllocator physicsAllocator{};
     HeapAllocator systemAllocator{};
 };
 

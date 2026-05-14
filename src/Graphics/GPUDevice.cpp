@@ -2477,12 +2477,12 @@ void GPUDevice::createSwapchain()
         imageName.appendF("Swapchain_Image_View_%d", imageCount);
 
         //VkObjectType objectType, uint64_t handle, const char* name
-        setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, std::bit_cast<uint64_t>(vulkanSwapchainImageViews[imageCount]), imageName.getText(0));
+        setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)(vulkanSwapchainImageViews[imageCount]), imageName.getText(0));
 
         imageName.clear();
         imageName.appendF("Swapchain_Image_%d", imageCount);
 
-        setResourceName(VK_OBJECT_TYPE_IMAGE, std::bit_cast<uint64_t>(vulkanSwapchainImages[imageCount]), imageName.getText(0));
+        setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64_t)(vulkanSwapchainImages[imageCount]), imageName.getText(0));
     }
 
     swapchainIsValid = true;
@@ -2681,7 +2681,7 @@ void GPUDevice::present()
         barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
         barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
         barrier.dstAccessMask = VK_ACCESS_2_NONE;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -2828,6 +2828,15 @@ void GPUDevice::present()
 
     VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
 
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
+        swapchainIsValid = false;
+    }
+    else if (result != VK_SUCCESS)
+    {
+        VOID_ERROR("Failed or present swapchain image!");
+    }
+
     //Resource deletion  using reverse iteration and swap with last element.
     if (resourceDeletionQueue.size > 0)
     {
@@ -2885,11 +2894,11 @@ void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
     VkImageMemoryBarrier2 barrierColour{};
     barrierColour.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrierColour.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrierColour.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    barrierColour.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrierColour.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    barrierColour.srcAccessMask = VK_ACCESS_NONE;
+    barrierColour.srcAccessMask = VK_ACCESS_2_NONE;
     barrierColour.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    barrierColour.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrierColour.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     barrierColour.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrierColour.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrierColour.image = vulkanSwapchainImages[vulkanImageIndex];
@@ -2904,11 +2913,11 @@ void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
     VkImageMemoryBarrier2 barrierDepth{};
     barrierDepth.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrierDepth.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrierDepth.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    barrierDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     barrierDepth.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    barrierDepth.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    barrierDepth.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     barrierDepth.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
-    barrierDepth.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    barrierDepth.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     barrierDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrierDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrierDepth.image = depthTextureLocal->vkImage;
