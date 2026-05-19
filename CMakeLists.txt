@@ -54,6 +54,8 @@ set(VOID_SOURCE src/main.cpp
                 src/Application/Window.cpp
                 src/Application/Keys.hpp
                 src/Application/Keys.cpp
+				src/Application/Audio.hpp
+				src/Application/Audio.cpp
 
                 src/Physics/Physics.hpp
                 src/Physics/Physics.cpp
@@ -72,10 +74,10 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/LoadGLTF.hpp
                 src/Graphics/LoadGLTF.cpp
 
-				src/Scene.hpp
-				src/Scene.cpp
-				src/Player.hpp
-				src/Player.cpp
+				src/Game/Scene.hpp
+				src/Game/Scene.cpp
+				src/Game/Player.hpp
+				src/Game/Player.cpp
 )
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})

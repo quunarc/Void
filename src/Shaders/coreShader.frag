@@ -232,7 +232,7 @@ void main()
     float distribution = (alphaSquared) / (PI * dDenom * dDenom);
 
     float lightRange = 5000.f;
-    float lightIntensity = 15000.f;
+    float lightIntensity = 1500.f;
 
     float NdotV = abs(dot(N, V)) + 1e-5;
     float NdotL = clamp(dot(N, L), 0, 1);

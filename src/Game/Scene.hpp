@@ -10,6 +10,8 @@
 
 #include "Physics/Physics.hpp"
 
+#include "Application/Audio.hpp"
+
 struct HeapAllocator;
 
 namespace
@@ -135,6 +137,8 @@ struct Scene
     Array<Model> models;
     Array<Model> debugModels;
     Array<JPH::BodyID> bodiesToBeAdded;
+    Array<ma_sound> sounds;
+    Array<ma_sound> musics;
 
     HeapAllocator* allocator;
 };

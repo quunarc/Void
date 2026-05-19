@@ -1,6 +1,7 @@
 #include "Application/Window.hpp"
 #include "Application/Input.hpp"
 #include "Application/Keys.hpp"
+#include "Application/Audio.hpp"
 
 #include "Graphics/GPUDevice.hpp"
 #include "Graphics/CommandBuffer.hpp"
@@ -15,8 +16,6 @@
 #include "cglm/struct/cam.h"
 
 #include "vender/imgui/imgui.h"
-#define MA_NO_DEVICE_IO
-#include "vender/miniaudio.c"
 //#include "vender/tracy/tracy/Tracy.hpp"
 
 #include "Foundation/File.hpp"
@@ -25,9 +24,9 @@
 #include "Foundation/Array.hpp"
 
 #include "Physics/Physics.hpp"
-#include "Player.hpp"
 
-#include "Scene.hpp"
+#include "Game/Player.hpp"
+#include "Game/Scene.hpp"
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
@@ -145,14 +144,6 @@ int main(int argc, char** argv)
     MemoryService::instance()->init(/*heapSize=*/ void_giga(1ull), /*stackSize=*/ void_mega(8), /*physicsStackSiz=*/ void_mega(40));
     timeServiceInit();
 
-    //ma_result result;
-    //ma_engine engine;
-
-    //result = ma_engine_init(NULL, &engine);
-    //if (result != MA_SUCCESS) {
-    //    return -1;
-    //}
-
     HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
     StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;
 
@@ -175,7 +166,7 @@ int main(int argc, char** argv)
     ImguiService* imgui = ImguiService::instance();
     ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
     imgui->init(&imguiConfig);
-
+ 
     //Window::instance()->setFullscreen(true);
 
     //Create pipeline state
@@ -336,11 +327,16 @@ int main(int argc, char** argv)
     float modelScale = 1.0f;
     bool fullscreen = false;
 
+    init();
+    loadAudio();
+
+
     Player player;
     player.init();
 
     bool debugRenderer = true;
     UniformData globalDebugData{};
+    vec3s playerPosition{};
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -358,6 +354,8 @@ int main(int argc, char** argv)
         //New Frame
         if (Window::instance()->minimised == false)
         {
+            playerPosition = convertToVec3(player.character->GetPosition());
+
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
             if (gpu.newFrame() == false)
@@ -380,6 +378,10 @@ int main(int argc, char** argv)
             if (inputHandler.isKeyJustReleased(Keys::KEY_1))
             {
                 debugRenderer = !debugRenderer;
+            }
+            else if (inputHandler.isKeyJustReleased(Keys::KEY_SPACE))
+            {
+                play();
             }
 
             ////NOTE: This must be after the OS messages.
@@ -408,9 +410,12 @@ int main(int argc, char** argv)
             beginFrameTick = currentTick;
 
             Physics::instance().updatePhysics(deltaTime);
+
+            //Audio
+            //audio.play();
             
             //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, convertToVec3(player.character->GetPosition()), {0.f, 0.f, 0.f, 0.f}, deltaTime);
+            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, {0.f, 0.f, 0.f, 0.f}, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
             CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
@@ -435,7 +440,8 @@ int main(int argc, char** argv)
             globalDebugData.project = gameCamera.internal3DCamera.projection;
             globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
             globalDebugData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
-            globalDebugData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
+            vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 10.f));
+            globalDebugData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
 
             //Scene
             gpuCommands->bindPipeline(cubePipeline);
@@ -631,6 +637,7 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
+    shutdown();
     skyboxImageArray.shutdown();
 
     gpu.destroyBuffer(positionalBuffer);

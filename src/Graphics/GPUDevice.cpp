@@ -2407,7 +2407,6 @@ void GPUDevice::createSwapchain()
         setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64_t)(vulkanSwapchainImages[imageCount]), imageName.getText(0));
 
         vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &renderFinishSemaphore[imageCount]);
-
     }
 
     swapchainIsValid = true;

@@ -137,7 +137,7 @@ public:
     // See: ContactListener
     virtual JPH::ValidateResult	OnContactValidate(const JPH::Body& inBody1, const JPH::Body& inBody2, JPH::RVec3Arg inBaseOffset, const JPH::CollideShapeResult& inCollisionResult) override
     {
-        vprint("Contact validate validate.\n");
+        //vprint("Contact validate validate.\n");
 
         // Allows you to ignore a contact before it is created (using layers to not make objects collide is cheaper!)
         return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
@@ -145,17 +145,17 @@ public:
 
     virtual void OnContactAdded(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold, JPH::ContactSettings& ioSettings) override
     {
-        vprint("Contact validate added.\n");
+        //vprint("Contact validate added.\n");
     }
 
     virtual void OnContactPersisted(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold, JPH::ContactSettings& ioSettings) override
     {
-        vprint("Contact validate persisted.\n");
+        //vprint("Contact validate persisted.\n");
     }
 
     virtual void OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair) override
     {
-        vprint("Contact validate removed.\n");
+        //vprint("Contact validate removed.\n");
     }
 };
 
@@ -167,12 +167,12 @@ public:
 
     virtual void OnBodyActivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override
     {
-        vprint("A body got activated.\n");
+        //vprint("A body got activated.\n");
     }
 
     virtual void OnBodyDeactivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override
     {
-        vprint("A body went to sleep.\n");
+        //vprint("A body went to sleep.\n");
     }
 };
 
