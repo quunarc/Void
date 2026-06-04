@@ -269,7 +269,6 @@ struct GPUDevice
     VkPresentModeKHR vulkanPresentMode;
     VkSwapchainKHR vulkanSwapchain;
     uint32_t swapchainImageCount;
-    const uint32_t framesInFlight = 3;
 
     VkDebugReportCallbackEXT vulkanDebugCallback;
     VkDebugUtilsMessengerEXT vulkanDebugUtilsMessenger;

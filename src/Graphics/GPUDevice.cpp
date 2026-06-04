@@ -1029,11 +1029,11 @@ vprint("Instance created.\n");
     fenceInfo.pNext = nullptr;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    imageAvailableSemaphore.init(allocator, framesInFlight, framesInFlight);
-    fences.init(allocator, framesInFlight, framesInFlight);
+    imageAvailableSemaphore.init(allocator, FRAMES_IN_FLIGHT, FRAMES_IN_FLIGHT);
+    fences.init(allocator, FRAMES_IN_FLIGHT, FRAMES_IN_FLIGHT);
 
     vprint("Semaphores created.\n");
-    for (uint32_t i = 0; i < framesInFlight; ++i)
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
         vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &imageAvailableSemaphore[i]);
 
@@ -1126,7 +1126,7 @@ void GPUDevice::shutdown()
     vkDeviceWaitIdle(vulkanDevice);
     commandBufferRing.shutdown();
 
-    for (uint32_t i = 0; i < framesInFlight; ++i)
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
         vkDestroySemaphore(vulkanDevice, imageAvailableSemaphore[i], vulkanAllocationCallbacks);
         vkDestroyFence(vulkanDevice, fences[i], vulkanAllocationCallbacks);
@@ -2290,7 +2290,7 @@ void GPUDevice::setPresentMode(VkPresentModeKHR mode)
 void GPUDevice::frameCountersAdvanced()
 {
     previousFrame = currentFrame;
-    currentFrame = (currentFrame + 1) % framesInFlight;
+    currentFrame = (currentFrame + 1) % FRAMES_IN_FLIGHT;
 
     ++absoluteFrame;
 }

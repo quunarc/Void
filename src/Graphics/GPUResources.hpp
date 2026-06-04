@@ -29,6 +29,8 @@ namespace
 
     constexpr uint32_t SUBMIT_HEADER_SENTINEL = 0xFEFEB7BA;
     constexpr uint32_t MAX_RESOURCE_DELETIONS = 64;
+
+    constexpr uint32_t FRAMES_IN_FLIGHT = 2;
 }
 
 enum ResourceUpdateType : uint8_t

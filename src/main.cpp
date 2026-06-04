@@ -44,8 +44,8 @@ namespace
     DescriptorSetLayoutHandle skyboxDescriptorSetLayout;
     DescriptorSetHandle skyboxDescriptorSet;
 
-    BufferHandle positionalBuffer;
-    BufferHandle debugRendererDataBuffer;
+    BufferHandle positionalBuffer[FRAMES_IN_FLIGHT];
+    BufferHandle debugRendererDataBuffer[FRAMES_IN_FLIGHT];
     BufferHandle debugGlobalBuffer;
 
     struct SkyboxData
@@ -288,18 +288,21 @@ int main(int argc, char** argv)
     PushConstants pushConstants{};
 
     BufferCreation bufferCreation{};
-    bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
-        .setName("othername")
-        .setData(scene.entityData.data);
-    positionalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
-    bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugRendererData) * scene.debugRendererData.size)
-        .setName("debugRenderer")
-        .setData(scene.debugRendererData.data);
-    debugRendererDataBuffer = gpu.createBindlessBuffer(bufferCreation);
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
+    {
+        bufferCreation.reset()
+            .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
+            .setName("othername")
+            .setData(scene.entityData.data);
+        positionalBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
 
+        bufferCreation.reset()
+            .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugRendererData) * scene.debugRendererData.size)
+            .setName("debugRenderer")
+            .setData(scene.debugRendererData.data);
+        debugRendererDataBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
+    }
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(UniformData))
         .setName("debugGlobalBuffer");
@@ -453,18 +456,15 @@ int main(int argc, char** argv)
 
             gpuCommands->bindlessDescriptorSet(1);
 
-            Buffer* positionBuff = gpu.accessBuffer(positionalBuffer);
+            Buffer* positionBuff = gpu.accessBuffer(positionalBuffer[gpu.currentFrame]);
             pushConstants.modelPositionAddress = positionBuff->bufferAddress;
-
-            uint32_t physicsMarker = scratchAllocator.getMarker();
-            Array<EntityData> physicsUpdateDataArray;
-            physicsUpdateDataArray.init(&scratchAllocator, scene.totalEntities);
 
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
 
             for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
             {
                 const Entity& entity = scene.entities[entityIndex];
+                uint32_t entityIdx = scene.entities[entityIndex].positionIndex;
 
                 if (entity.isPlayer == false)
                 {
@@ -472,26 +472,19 @@ int main(int argc, char** argv)
                     {
                         EntityData physicsPosition{};
                         JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
-                        physicsPosition.pos = convertToMat4(newPos);
-                        physicsPosition.colour = scene.entityData[entityIndex].colour;
-
-                        physicsUpdateDataArray.push(physicsPosition);
+                        scene.entityData[entityIdx].pos = convertToMat4(newPos);
+                        scene.entityData[entityIdx].colour = scene.entityData[entityIndex].colour;
                     }
                 }
                 else
                 {
                     player.update(deltaTime);
-                    EntityData physicsPosition{};
                     JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(player.character->GetBodyID());
-                    physicsPosition.pos = convertToMat4(newPos);
-                    physicsPosition.colour = scene.entityData[0].colour;
-
-                    physicsUpdateDataArray.push(physicsPosition);
+                    scene.entityData[entityIdx].pos = convertToMat4(newPos);
                 }
             }
 
-            vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
-            scratchAllocator.freeMarker(physicsMarker);
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
 
             for (uint32_t modelIndexType = 0; modelIndexType < scene.models.size; ++modelIndexType)
             {
@@ -529,12 +522,7 @@ int main(int argc, char** argv)
                 //Debug
                 gpuCommands->bindPipeline(debugPipeline);
 
-                uint32_t debugRendererMarker = scratchAllocator.getMarker();
-
-                Array<DebugRendererData> debugRenderingDataArray;
-                debugRenderingDataArray.init(&scratchAllocator, scene.totalEntities);
-
-                Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer);
+                Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer[gpu.currentFrame]);
                 pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
 
                 globalDebugData.globalModel = globalModel;
@@ -547,35 +535,25 @@ int main(int argc, char** argv)
                 for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
                 {
                     const Entity& entity = scene.entities[entityIndex];
+                    uint32_t entityIdx = entity.positionIndex;
                     if (entity.isPlayer == false)
                     {
                         if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
                         {
-                            DebugRendererData debugRenderData{};
                             JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
-                            debugRenderData.position = convertToMat4(newPos);
-                            debugRenderData.model = scene.debugRendererData[entityIndex].model;
-                            debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
-
-                            debugRenderingDataArray.push(debugRenderData);
+                            scene.debugRendererData[entityIdx].position = convertToMat4(newPos);
                         }
                     }
                     else 
                     {
-                        DebugRendererData debugRenderData{};
                         JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(player.character->GetBodyID());
-                        debugRenderData.position = convertToMat4(newPos);
-                        debugRenderData.position.m31 += 0.6f;
-                        debugRenderData.position.m30 += 0.2f;
-                        debugRenderData.model = scene.debugRendererData[entityIndex].model;
-                        debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
-
-                        debugRenderingDataArray.push(debugRenderData);
+                        scene.debugRendererData[entityIdx].position = convertToMat4(newPos);
+                        //scene.debugRendererData[entityIdx].position.m31 += 0.6f;
+                        //scene.debugRendererData[entityIdx].position.m30 += 0.2f;
                     }
                 }
 
-                vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData)* debugRenderingDataArray.size);
-                scratchAllocator.freeMarker(debugRendererMarker);
+                vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.debugRendererData.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * scene.debugRendererData.size);
 
                 for (uint32_t modelIndexType = 0; modelIndexType < scene.debugModels.size; ++modelIndexType)
                 {
@@ -645,12 +623,14 @@ int main(int argc, char** argv)
     audioSystem.shutdown();
     skyboxImageArray.shutdown();
 
-    gpu.destroyBuffer(positionalBuffer);
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
+    {
+        gpu.destroyBuffer(positionalBuffer[i]);
+        gpu.destroyBuffer(debugRendererDataBuffer[i]);
+    }
 
     gpu.destroyDescriptorSet(skyboxDescriptorSet);
     gpu.destroyBuffer(skyboxMaterialBuffer);
-    //gpu.destroyBuffer(skyboxUniformBuffer);
-    gpu.destroyBuffer(debugRendererDataBuffer);
     gpu.destroyBuffer(debugGlobalBuffer);
 
     scene.shutdownScene(gpu, Physics::instance());
