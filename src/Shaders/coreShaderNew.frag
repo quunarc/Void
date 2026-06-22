@@ -336,8 +336,10 @@ void main()
     vec3 luminance = ((specular * Fd) * spotLightIntensity * NoL);
     vec3 luminance1 = ((specular * Fd) * directionalLightIntensity * NoL) * vec3(1.0, 0.867, 0.684);
 
-    vec3 materialColour = emissive + mix(luminance, luminance, occlusion);
-    vec3 materialColour1 = emissive + mix(luminance1, luminance1, occlusion);
+    vec3 materialColour = mix(luminance, luminance, occlusion);
+    vec3 materialColour1 = mix(luminance1, luminance1, occlusion);
 
-	fragColour = vec4(encodeSRGB((materialColour + materialColour1) + (baseColour.rgb * 0.01)), baseColour.a);
+    vec3 finalColour = emissive + (materialColour + materialColour1) + (baseColour.rgb * 0.01);
+
+	fragColour = vec4(encodeSRGB(finalColour), baseColour.a);
 }
