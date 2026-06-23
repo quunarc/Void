@@ -16,18 +16,6 @@ VoidContactListener::VoidContactListener()
 JPH::ValidateResult	VoidContactListener::OnContactValidate(const JPH::Body& inBody1, const JPH::Body& inBody2, JPH::RVec3Arg inBaseOffset, const JPH::CollideShapeResult& inCollisionResult)
 {
     //vprint("Contact validate validate.\n");
-
-    //mat4s deletionMatrix = glms_mat4_identity();
-    //deletionMatrix.m30 = FLT_MAX;
-    //deletionMatrix.m31 = FLT_MAX;
-    //deletionMatrix.m32 = FLT_MAX;
-    //scene.entityData[21].position = deletionMatrix;
-    //scene.entityData[1].position = deletionMatrix;
-    //scene.entities[21].isDeleted = true;
-    //scene.entities[1].isDeleted = true;
-
-    //Physics::instance().bodyInterface->DeactivateBody(scene.entities[1].bodyID);
-    //Physics::instance().bodyInterface->DeactivateBody(scene.entities[21].bodyID);
     uintptr_t pointer1 = inBody1.GetUserData();
     if (pointer1 != 0)
     {
@@ -38,9 +26,12 @@ JPH::ValidateResult	VoidContactListener::OnContactValidate(const JPH::Body& inBo
             static_cast<Player*>(currentEntity->entityData)->crashNoise();
             break;
         case EntityType::ROCK:
-            mutex.lock();
-            toDeleteQueue.push(currentEntity->entityIndex);
-            mutex.unlock();
+            if (currentEntity->isDeleted == false)
+            {
+                mutex.lock();
+                toDeleteQueue.push(currentEntity->entityIndex);
+                mutex.unlock();
+            }
             break;
         }
     }
@@ -55,9 +46,12 @@ JPH::ValidateResult	VoidContactListener::OnContactValidate(const JPH::Body& inBo
             static_cast<Player*>(currentEntity->entityData)->crashNoise();
             break;
         case EntityType::ROCK:
-            mutex.lock();
-            toDeleteQueue.push(currentEntity->entityIndex);
-            mutex.unlock();
+            if (currentEntity->isDeleted == false)
+            {
+                mutex.lock();
+                toDeleteQueue.push(currentEntity->entityIndex);
+                mutex.unlock();
+            }
             break;
         }
     }
