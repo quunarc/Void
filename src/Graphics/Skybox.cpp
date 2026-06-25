@@ -68,8 +68,7 @@ void initSkybox(GPUDevice& gpu)
 {
     //Depth
     PipelineCreation skyboxPipelineCreation{};
-    skyboxPipelineCreation.depthStencil.depthEnable = true;
-    skyboxPipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    skyboxPipelineCreation.depthStencil.setDepth(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
     //Shader state
     FileReadResult vertSkybox = fileReadBinary("Assets/Shaders/skybox.vert.spv", &MemoryService::instance()->scratchAllocator);
@@ -84,15 +83,15 @@ void initSkybox(GPUDevice& gpu)
     DescriptorSetLayoutCreation skyboxSetLayout{};
     skyboxSetLayout
         .addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL, .name = "SkyboxMaterial" })
-        .setSetIndex(0);
+        .setSetIndex(1);
     skyboxSetLayout.bindless = false;
 
     //Setting it into pipeline.
     //This descriptor set layout will be ran every draw calls
     skyboxDescriptorSetLayout = gpu.createDescriptorSetLayout(skyboxSetLayout);
     //This descriptor set layout will be ran every frame
-    skyboxPipelineCreation.addDescriptorSetLayout(skyboxDescriptorSetLayout)
-        .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
+    skyboxPipelineCreation.addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle)
+                          .addDescriptorSetLayout(skyboxDescriptorSetLayout);
 
     skyboxPipeline = gpu.createPipeline(skyboxPipelineCreation);
 
@@ -134,7 +133,7 @@ void initSkybox(GPUDevice& gpu)
     skyboxDescriptorSet = gpu.createDescriptorSet(dsCreation);
 }
 
-void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, Buffer* globalSceneBuffer, PushConstants pushConstants, UniformData globalSceneData)
+void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, PushConstants pushConstants)
 {
     //Skybox!
     gpuCommands.bindPipeline(skyboxPipeline);
@@ -150,8 +149,8 @@ void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, Buffer* globalSceneB
 
     vkCmdPushConstants(gpuCommands.vkCommandBuffer, gpuCommands.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-    gpuCommands.bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
-    gpuCommands.bindlessDescriptorSet(1);
+    gpuCommands.bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 1);
+    //gpuCommands.bindlessDescriptorSet(1);
 
     gpuCommands.draw(36, 1, 0, 0);
 }

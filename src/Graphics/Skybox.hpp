@@ -7,7 +7,7 @@
 #include "ShaderData.hpp"
 
 void initSkybox(GPUDevice& gpu);
-void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, Buffer* globalSceneBuffer, PushConstants pushConstants, UniformData globalSceneData);
+void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, PushConstants pushConstants);
 void shutdownSkybox(GPUDevice& gpu);
 
 #endif // !SKYBOX_HDR

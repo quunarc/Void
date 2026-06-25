@@ -30,7 +30,7 @@ struct Camera
     //Unproject by inverting the y of the screen coordinate.
     vec3s unprojectInverted(const vec3s& screenCooridates);
 
-    void getProjectionOrtho2D(mat4s& outMatrix);
+    void getProjectionOrtho2D(mat4s& outMatrix) const;
 
     static void yawPitchFromDirection(const vec3s& direction, float &yaw, float &pitch);
 

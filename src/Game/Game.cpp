@@ -117,17 +117,16 @@ void Game::init()
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation mainCreation{};
-    mainCreation
-        .addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL, .name = "MaterialConstant" })
-        .setSetIndex(0);
+    mainCreation.addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL_GRAPHICS, .name = "MaterialConstant" })
+        .setSetIndex(1);
     mainCreation.bindless = false;
 
     //Setting it into pipeline.
     //This descriptor set layout will be ran every draw calls
     mainDescriptorSetLayout = gpu.createDescriptorSetLayout(mainCreation);
     //This descriptor set layout will be ran every frame
-    pipelineCreation.addDescriptorSetLayout(mainDescriptorSetLayout)
-        .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
+    pipelineCreation.addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle)
+                    .addDescriptorSetLayout(mainDescriptorSetLayout);
 
     mainPipeline = gpu.createPipeline(pipelineCreation);
 
@@ -146,8 +145,6 @@ void Game::init()
         .setSPVInput(true);
 
     debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ true);
-
-    initSkybox(gpu);
 
     // Register allocation hook. In this example we'll just let Jolt use malloc / free but you can override these if you want (see Memory.h).
     // This needs to be done before any other Jolt function is called.
@@ -183,6 +180,10 @@ void Game::init()
 
     gameCamera.internal3DCamera.initPerspective(0.01f, 5000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
     gameCamera.init(7.f, 3.0f, 0.1f);
+
+    initSkybox(gpu);
+    renderer2D.init(gpu);
+    renderer2D.loadBuffer();
 
     modelScale = 1.0f;
     fullscreen = false;
@@ -278,8 +279,8 @@ void Game::loop()
 
             static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, audioSystem);
 
-            //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
+            gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            //gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
             
             deleteEntity();
@@ -311,7 +312,7 @@ void Game::loop()
             //Scene
             gpuCommands->bindPipeline(mainPipeline);
 
-            gpuCommands->bindlessDescriptorSet(1);
+            gpuCommands->bindlessDescriptorSet(0);
 
             Buffer* positionBuff = gpu.accessBuffer(positionalBuffer[gpu.currentFrame]);
             pushConstants.modelPositionAddress = positionBuff->bufferAddress;
@@ -367,7 +368,7 @@ void Game::loop()
                     vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
-                    gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
+                    gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 1);
 
                     gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
                 }
@@ -403,13 +404,14 @@ void Game::loop()
                 }
             }
 
-            drawSkybox(gpu, *gpuCommands, globalSceneBuffer, pushConstants, globalSceneData);
+            drawSkybox(gpu, *gpuCommands, pushConstants);
+            renderer2D.drawQuad(*gpuCommands);
 
             //imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
-            gpuProfiler.update(gpu);
+            //gpuProfiler.update(gpu);
 
             gpu.queueCommandBuffer(gpuCommands);
             gpu.present();
@@ -429,6 +431,7 @@ void Game::shutdown()
 
     audioSystem.shutdown();
     shutdownSkybox(gpu);
+    renderer2D.shutdown();
 
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {

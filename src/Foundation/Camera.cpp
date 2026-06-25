@@ -136,7 +136,7 @@ vec3s Camera::unprojectInverted(const vec3s& screenCooridates)
     return unproject(screenCooridatesInvertedY);
 }
 
-void Camera::getProjectionOrtho2D(mat4s& outMatrix) 
+void Camera::getProjectionOrtho2D(mat4s& outMatrix) const
 {
     outMatrix = glms_ortho(0, viewportWidth * zoom, 0, viewportHeight * zoom, -1.f, 1.f);
 }

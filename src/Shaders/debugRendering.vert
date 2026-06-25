@@ -32,11 +32,6 @@ struct SceneData
     vec4 light;
 };
 
-struct DebugModel
-{
-    mat4 model;
-};
-
 layout(scalar, buffer_reference) readonly buffer VertexData
 {
     Vertices vertexData[];

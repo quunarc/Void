@@ -203,7 +203,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
             //Bindless
             //Skip bindings for images and textures they are bindless, thus bound in the global bindless array (one for images, one for textures).
-            if (bindlessDescriptorSetLayoutIndex == 1 && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
+            if (bindlessDescriptorSetLayoutIndex == 0 && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
             {
                 continue;
             }
@@ -215,8 +215,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
             descriptorWrite[i].pNext = nullptr;
             descriptorWrite[i].dstSet = vkDescriptorSet;
             //Use binding array to get final binding point.
-            //const uint32_t bindingPoint = binding.start;
-            const uint32_t bindingPoint = binding.start;
+            //const uint32_t bindingPoint = binding.binding;
+            const uint32_t bindingPoint = binding.binding;
             descriptorWrite[i].dstBinding = bindingPoint;
             descriptorWrite[i].dstArrayElement = 0;
             descriptorWrite[i].descriptorCount = 1;
@@ -1028,7 +1028,7 @@ vprint("Instance created.\n");
     DescriptorSetLayoutCreation bindlessLayoutCreation{};
     bindlessLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, BINDLESS_TEXTURE_BINDING, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessTextures" })
                           .addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, BINDLESS_IMAGE_BINDING, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessImages" })
-                          .setSetIndex(1)
+                          .setSetIndex(0)
                           .setName("BindlessLayout");
     bindlessLayoutCreation.bindless = true;
 
@@ -1416,8 +1416,8 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation, bool 
     for (uint32_t layout = 0; layout < creation.numActiveLayouts; ++layout)
     {
         //Bindless
-        //At index 1 there is a bindless layout.
-        if (layout == 1)
+        //At index 0 there is a bindless layout.
+        if (layout == 0)
         {
             DescriptorSetLayout* setLayout = accessDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
             //We don't want to delete this set as it's global and will be freed later.
@@ -1725,7 +1725,6 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
 
     DescriptorSetLayout* descriptorSetLayout = accessDescriptorSetLayout(handle);
 
-
     uint16_t maxBinding = 0;
     for (uint32_t r = 0; r < creation.numBindings; ++r)
     {
@@ -1751,19 +1750,19 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
     {
         DescriptorBinding& binding = descriptorSetLayout->bindings[i];
         const DescriptorSetLayoutCreation::Binding& inputBinding = creation.bindings[i];
-        binding.start = inputBinding.binding == UINT16_MAX ? static_cast<uint16_t>(i) : inputBinding.binding;
+        binding.binding = inputBinding.binding == UINT16_MAX ? static_cast<uint16_t>(i) : inputBinding.binding;
         binding.count = 1;
         binding.type = inputBinding.type;
         binding.name = inputBinding.name;
 
         //Add binding to binding index.
-        descriptorSetLayout->indexToBinding[binding.start] = static_cast<uint8_t>(i);
+        descriptorSetLayout->indexToBinding[binding.binding] = static_cast<uint8_t>(i);
 
         //Bindless
         //Skip bindings for images and textures they are bindless, thus bound in the global bindless array (one for images, one for textures).
         //TODO: Better solution to allow individual image view to be bound
         //NOTE: In my old engine set index 0 was a special "global" descriptor set layout. Meaning that anything bindless was part of the MATERIAL_SET found in the shaders.
-        if (creation.setIndex == 1 && skipBindlessBindings && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
+        if (creation.setIndex == 0 && skipBindlessBindings && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
         {
             continue;
         }
@@ -1771,7 +1770,7 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
         VkDescriptorSetLayoutBinding& vkBinding = descriptorSetLayout->vkBinding[usedBindings];
         ++usedBindings;
 
-        vkBinding.binding = binding.start;
+        vkBinding.binding = binding.binding;
         vkBinding.descriptorType = inputBinding.type;
         vkBinding.descriptorCount = inputBinding.count;
 

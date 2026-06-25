@@ -78,6 +78,8 @@ set(VOID_SOURCE src/main.cpp
 				src/Graphics/Skybox.hpp
                 src/Graphics/Skybox.cpp
 				src/Graphics/ShaderData.hpp
+				src/Graphics/2DRenderer.hpp
+				src/Graphics/2DRenderer.cpp
 
 				src/Game/Scene.hpp
 				src/Game/Scene.cpp

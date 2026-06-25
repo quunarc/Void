@@ -6,6 +6,7 @@
 #include "Graphics/GPUDevice.hpp"
 #include "Graphics/GPUProfiler.hpp"
 #include "Graphics/VoidImgui.hpp"
+#include "Graphics/2DRenderer.hpp"
 
 #include "Game/Player.hpp"
 #include "Game/Scene.hpp"
@@ -28,6 +29,7 @@ struct Game
     vec3s playerPosition{};
 
     ImguiService* imgui;
+    Renderer2D renderer2D;
 
     int64_t beginFrameTick;
 

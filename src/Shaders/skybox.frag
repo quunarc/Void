@@ -20,21 +20,21 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Sce
     SceneData sceneData;
 };
 
-layout(scalar, set = 0, binding = 0) uniform SkyboxData
+layout(scalar, set = 1, binding = 0) uniform SkyboxData
 {
     vec3 testColour;
     uint skyboxTextureIndex;
 };
 
-layout(set = 1, binding = 0) uniform sampler2D globalTextures[];
+layout(set = 0, binding = 0) uniform sampler2D globalTextures[];
 //Alias textures to use the same binding point, as bindless texture is shared
 //between all kind of textures: 1d, 2d, 3d.
-layout(set = 1, binding = 0) uniform sampler3D globalTextures3D[];
+layout(set = 0, binding = 0) uniform sampler3D globalTextures3D[];
 
-layout(set = 1, binding = 0) uniform samplerCube globalTexturesCube[];
+layout(set = 0, binding = 0) uniform samplerCube globalTexturesCube[];
 
 //Write only image do not need formatting in layout.
-layout(set = 1, binding = 1) writeonly uniform image2D globalImages2D[];
+layout(set = 0, binding = 1) writeonly uniform image2D globalImages2D[];
 
 
 layout (location = 0) in vec3 dir;

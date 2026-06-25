@@ -305,13 +305,13 @@ namespace
         DescriptorSetLayoutCreation descriptorSetLayoutCreation{};
 
         descriptorSetLayoutCreation.addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_VERTEX_BIT, .name = "LocalConstants" })
-            .setSetIndex(0)
+            .setSetIndex(1)
             .setName("RLL_Imgui");
         descriptorSetLayoutCreation.bindless = false;
 
         sDescriptorSetLayout = gpu->createDescriptorSetLayout(descriptorSetLayoutCreation);
-        pipelineCreation.addDescriptorSetLayout(sDescriptorSetLayout)
-                        .addDescriptorSetLayout(gpu->bindlessDescriptorSetLayoutHandle);
+        pipelineCreation.addDescriptorSetLayout(gpu->bindlessDescriptorSetLayoutHandle)
+                        .addDescriptorSetLayout(sDescriptorSetLayout);
         imguiPipelineHandle = gpu->createPipeline(pipelineCreation);
 
         //Create constant buffer.
@@ -466,8 +466,8 @@ namespace
 
         //Render command lists.
         int counts = drawData->CmdListsCount;
-        commands.bindDescriptorSet(&uiDescriptorSet, 1, nullptr, 0, 0);
-        commands.bindlessDescriptorSet(1);
+        commands.bindDescriptorSet(&uiDescriptorSet, 1, nullptr, 0, 1);
+        //commands.bindlessDescriptorSet(0);
 
         uint32_t vertexBufferOffset = 0;
         uint32_t indexBufferOffset = 0;

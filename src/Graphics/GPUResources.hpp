@@ -187,7 +187,7 @@ struct BlendStateCreation
 
 struct RasterisationCreation 
 {
-    VkCullModeFlagBits cullMode = VK_CULL_MODE_NONE;
+    VkCullModeFlagBits cullMode = VK_CULL_MODE_BACK_BIT;
     VkFrontFace front = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     VkPolygonMode fill = VK_POLYGON_MODE_FILL;
 };
@@ -610,7 +610,7 @@ struct DescriptorBinding
 {
     VkDescriptorType type;
 
-    uint16_t start = 0;
+    uint16_t binding = 0;
     uint16_t count = 0;
     uint16_t set = 0;
 

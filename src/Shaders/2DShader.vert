@@ -5,50 +5,47 @@
 #extension GL_EXT_shader_16bit_storage: require
 #extension GL_ARB_gpu_shader_int64 : enable
 
-struct Vertices
-{
-    float px, py, pz;
-    float padd;
-    float16_t tu, tv;
-};
+const vec3 pos[4] = vec3[4]
+(
+	vec3(0.0, 0.0, 0.0),
+	vec3(1.0, 0.0, 0.0),
+	vec3(1.0, 1.0, 0.0),
+	vec3(0.0, 1.0, 0.0)
+);
 
-struct ModelPosition
+const int indices[6] = int[6]
+(
+	0, 1, 2, 2, 3, 0
+);
+
+struct QuadPosition
 {
-    mat4 pos;
-    mat4 debugModel;
+    mat4 transform;
     vec4 colour;
-    float padd[4];
+    vec2 texCoords[4];
+    uint textureID;
+    float padd[3];
 };
 
-struct SceneData
+struct SceneData2D
 {
-    mat4 view;
-    mat4 project;
-    mat4 globalModel;
-    vec4 eye;
-    vec4 light;
+    mat4 ortho;
 };
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer VertexData
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer QuadPositionData
 {
-    Vertices vertexData[];
+    QuadPosition quadPositions[];
 };
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer ModelPositionData
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBuffer2DData
 {
-    ModelPosition modelPositions[];
-};
-
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
-{
-    SceneData sceneData;
+    SceneData2D sceneData2D;
 };
 
 layout(scalar, push_constant) uniform entityIndex
 {
-    VertexData vertexDataReference;
-    ModelPositionData modelPositionsReference;
-    SceneBufferData sceneBufferReference;
+    QuadPositionData quadPositionsReference;
+    SceneBuffer2DData scene2D;
 };
 
 layout(location = 0) out vec2 vTexcoord;
@@ -57,17 +54,16 @@ layout(location = 2) flat out uint textureID;
 
 void main()
 {
-    vec3 position = vec3(vertexDataReference.vertexData[gl_VertexIndex].px, 
-                         vertexDataReference.vertexData[gl_VertexIndex].py, 
-                         vertexDataReference.vertexData[gl_VertexIndex].pz);
+    int idx = indices[gl_VertexIndex];
+    vec3 position = pos[idx];
 
-    vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
+    vec2 texcoord = vec2(quadPositionsReference.quadPositions[gl_InstanceIndex].texCoords[idx].x, quadPositionsReference.quadPositions[gl_InstanceIndex].texCoords[idx].y);
 
-    gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * vec4(position, 1.0);
+    gl_Position = scene2D.sceneData2D.ortho * quadPositionsReference.quadPositions[gl_InstanceIndex].transform * vec4(position, 1.0);
 
-    textureID = gl_InstanceIndex;
+    textureID = quadPositionsReference.quadPositions[gl_InstanceIndex].textureID;
 
     vTexcoord = texcoord;
 
-    vColour = modelPositionsReference.modelPositions[gl_InstanceIndex].colour;
+    vColour = quadPositionsReference.quadPositions[gl_InstanceIndex].colour;
 }

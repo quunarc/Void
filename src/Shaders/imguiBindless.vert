@@ -10,7 +10,7 @@ layout(location = 0) out vec2 fragUV;
 layout(location = 1) out vec4 fragColour;
 layout(location = 2) flat out uint textureID;
 
-layout(scalar, set = 0, binding = 0) uniform LocalConstants 
+layout(scalar, set = 1, binding = 0) uniform LocalConstants 
 { 
 	mat4 projectionMatrix; 
 };
