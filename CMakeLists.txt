@@ -36,6 +36,9 @@ message(STATUS ${VULKAN_INCLUDE_DIR})
 if(MSVC)
     set(VULKAN_LIB "$ENV{VULKAN_SDK}/Lib/vulkan-1.lib")
     set(SDL_LIB "${CMAKE_CURRENT_SOURCE_DIR}/libs/Win/SDL3/x64/SDL3.lib")
+else()
+    set(VULKAN_LIB "/home/user/Documents/git/Void/libs/Lin/Vulkan/libvulkan.so")
+    set(SDL_LIB "/home/user/Documents/git/Void/libs/Lin/SDL3/x64/libSDL3.so")
 endif()
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES "src/Shaders/*.vert" "src/Shaders/*.frag" "src/Shaders/*.comp" "src/Shaders/*.mesh" "src/Shaders/*.task")
@@ -136,8 +139,8 @@ else()
     target_link_libraries(Void PRIVATE
                           dl
                           pthread
-                          SDL3
-                          vulkan)
+			  ${SDL_LIB}
+			  ${VULKAN_LIB})
 endif()
 
 ###Foundation
@@ -691,7 +694,7 @@ if (WIN32)
 endif()
 
 # Vulkan support
-find_package(Vulkan)
+#find_package(Vulkan)
 # Vulkan source files
 set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_SRC_FILES}
@@ -716,8 +719,6 @@ set (PHYSICS_REPO_ROOT "src/Physics")
 #source_group(Intermediate FILES ${JOLT_PHYSICS_SPV_SHADERS})
 # Group source files
 
-#message(STATUS ${JOLT_PHYSICS_SRC_FILES} ${JOLT_PHYSICS_SHADERS} ${JOLT_PHYSICS_SHADER_HEADERS})
-
 #source_group(TREE ${JOLT_PHYSICS_SHADER_HEADERS})
 
 add_library(Jolt STATIC ${JOLT_PHYSICS_SRC_FILES} ${JOLT_PHYSICS_SHADERS} ${JOLT_PHYSICS_SHADER_HEADERS} ${JOLT_PHYSICS_SPV_SHADERS})
@@ -731,8 +732,8 @@ add_library(Jolt::Jolt ALIAS Jolt)
 
 target_compile_definitions(Jolt PUBLIC JPH_USE_VK)
 
-target_include_directories(Jolt PUBLIC ${Vulkan_INCLUDE_DIRS} ${JOLT_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR} ${ENGINE_INCLUDE} ${JOLT_RENDERER_INCLUDE} ${JOLT_BASE_RENDERER_INCLUDE})
-target_link_libraries(Jolt LINK_PUBLIC ${Vulkan_LIBRARIES})
+target_include_directories(Jolt PUBLIC ${VULKAN_INCLUDE_DIR} ${JOLT_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR} ${ENGINE_INCLUDE} ${JOLT_RENDERER_INCLUDE} ${JOLT_BASE_RENDERER_INCLUDE})
+target_link_libraries(Jolt LINK_PUBLIC ${VULKAN_LIB})
 
 target_compile_definitions(Jolt PUBLIC JPH_USE_CPU_COMPUTE)
 #target_compile_definitions(Jolt PUBLIC "JPH_DEBUG_RENDERER")
@@ -847,17 +848,17 @@ else(UNIX)
     list(APPEND THINGS_TO_COPY "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so.0.2.28"
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so.0"
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so"
-                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so.1.4.341"
-                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so.1"
-                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so"
-                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/run_game.sh")
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/Vulkan/libvulkan.so.1.4.350"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/Vulkan/libvulkan.so.1"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/Vulkan/libvulkan.so"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/run_game.sh")
 endif()
 
 file(COPY ${THINGS_TO_COPY} DESTINATION ${CMAKE_BINARY_DIR})
 
 #NOTE At release this needs to be updated to look for glslang at a particular location.
 if(UNIX)
-    set(GLSL_VALIDATOR "glslangValidator")
+    set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/bin/glslangValidator")
 elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
     set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin/glslangValidator.exe")
 else()
