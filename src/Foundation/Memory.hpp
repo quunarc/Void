@@ -91,7 +91,7 @@ struct DoubleStackAllocator : public Allocator
 
     virtual void* allocate(size_t size, size_t alignment) override;
     virtual void* allocate(size_t size, size_t alignment, const char* file, int32_t line) override;
-    virtual void* reallocate(void* pointer, size_t size) override {}
+    virtual void* reallocate(void* pointer, size_t size) override;
 
     virtual void deallocate(void* pointer) override;
 

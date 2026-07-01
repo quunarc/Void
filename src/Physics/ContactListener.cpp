@@ -33,6 +33,8 @@ JPH::ValidateResult	VoidContactListener::OnContactValidate(const JPH::Body& inBo
                 mutex.unlock();
             }
             break;
+	default:
+	    break;
         }
     }
 
@@ -53,6 +55,8 @@ JPH::ValidateResult	VoidContactListener::OnContactValidate(const JPH::Body& inBo
                 mutex.unlock();
             }
             break;
+        default:
+	    break;
         }
     }
 

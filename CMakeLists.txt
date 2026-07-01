@@ -57,16 +57,16 @@ set(VOID_SOURCE src/main.cpp
                 src/Application/Window.cpp
                 src/Application/Keys.hpp
                 src/Application/Keys.cpp
-				src/Application/Audio.hpp
-				src/Application/Audio.cpp
-				src/Application/UserInterface.hpp
-				src/Application/UserInterface.cpp
+		src/Application/Audio.hpp
+		src/Application/Audio.cpp
+		src/Application/UserInterface.hpp
+		src/Application/UserInterface.cpp
 
                 src/Physics/Physics.hpp
                 src/Physics/Physics.cpp
-				src/Physics/ContactListener.hpp
-				src/Physics/ContactListener.cpp
-				src/Physics/CollisionGeometry.h
+		src/Physics/ContactListener.hpp
+		src/Physics/ContactListener.cpp
+		src/Physics/CollisionGeometry.h
 
                 src/Graphics/VoidImgui.hpp
                 src/Graphics/VoidImgui.cpp
@@ -80,21 +80,21 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/GPUResources.cpp
                 src/Graphics/LoadGLTF.hpp
                 src/Graphics/LoadGLTF.cpp
-				src/Graphics/Skybox.hpp
+		src/Graphics/Skybox.hpp
                 src/Graphics/Skybox.cpp
-				src/Graphics/ShaderData.hpp
-				src/Graphics/2DRenderer.hpp
-				src/Graphics/2DRenderer.cpp
+		src/Graphics/ShaderData.hpp
+		src/Graphics/2DRenderer.hpp
+		src/Graphics/2DRenderer.cpp
 
-				src/Game/Scene.hpp
-				src/Game/Scene.cpp
-				src/Game/Player.hpp
-				src/Game/Player.cpp
-				src/Game/Utils.hpp
-				src/Game/Game.hpp
-				src/Game/Game.cpp
-				src/Game/MainMenu.hpp
-				src/Game/MainMenu.cpp
+		src/Game/Scene.hpp
+		src/Game/Scene.cpp
+		src/Game/Player.hpp
+		src/Game/Player.cpp
+		src/Game/Utils.hpp
+		src/Game/Game.hpp
+		src/Game/Game.cpp
+		src/Game/MainMenu.hpp
+		src/Game/MainMenu.cpp
 )
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
@@ -112,6 +112,8 @@ else(UNIX)
                                CGLM_FORCE_DEPTH_ZERO_TO_ONE
                                #VOID_IMGUI                     
                                VK_USE_PLATFORM_WAYLAND_KHR)
+    target_compile_options(Void PRIVATE -Wno-unused-function)
+    target_compile_options(Void PRIVATE -Wno-conversion-null)
 endif()
 
 target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR} 
@@ -126,7 +128,7 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
                                                ${CGLTF_INCLUDE}
                                                ${SPRIV_INCLUDE}
                                                ${MESHOP_INCLUDE}
-											   ${JOLT_INCLUDE})
+					       ${JOLT_INCLUDE})
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 

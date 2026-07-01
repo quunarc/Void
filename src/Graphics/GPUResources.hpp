@@ -48,7 +48,7 @@ enum ResourceUpdateType : uint8_t
 struct Allocator;
 struct DeviceStateVulkan;
 
-struct BufferHandle 
+struct [[maybe_unused]] BufferHandle 
 {
     bool operator==(const BufferHandle& rhs) 
     {
@@ -63,7 +63,7 @@ struct BufferHandle
     uint32_t index;
 };
 
-struct TextureHandle 
+struct [[maybe_unused]] TextureHandle 
 {
     bool operator==(const TextureHandle& rhs)
     {
@@ -78,7 +78,7 @@ struct TextureHandle
     uint32_t index;
 };
 
-struct ShaderStateHandle 
+struct [[maybe_unused]] ShaderStateHandle 
 {
     bool operator==(const ShaderStateHandle& rhs)
     {
@@ -93,7 +93,7 @@ struct ShaderStateHandle
     uint32_t index;
 };
 
-struct SamplerHandle 
+struct [[maybe_unused]] SamplerHandle 
 {
     bool operator==(const SamplerHandle& rhs)
     {
@@ -108,7 +108,7 @@ struct SamplerHandle
     uint32_t index;
 };
 
-struct DescriptorSetLayoutHandle 
+struct [[maybe_unused]] DescriptorSetLayoutHandle 
 {
     bool operator==(const DescriptorSetLayoutHandle& rhs)
     {
@@ -123,7 +123,7 @@ struct DescriptorSetLayoutHandle
     uint32_t index;
 };
 
-struct DescriptorSetHandle 
+struct [[maybe_unused]] DescriptorSetHandle 
 {
     bool operator==(const DescriptorSetHandle& rhs)
     {
@@ -138,7 +138,7 @@ struct DescriptorSetHandle
     uint32_t index;
 };
 
-struct PipelineHandle 
+struct [[maybe_unused]] PipelineHandle 
 {
     bool operator==(const PipelineHandle& rhs)
     {
@@ -153,13 +153,13 @@ struct PipelineHandle
     uint32_t index;
 };
 
-static BufferHandle INVALID_BUFFER { INVALID_INDEX };
-static TextureHandle INVALID_TEXTURE { INVALID_INDEX };
-static ShaderStateHandle INVALID_SHADER { INVALID_INDEX };
-static SamplerHandle INVALID_SAMPLER { INVALID_INDEX };
-static DescriptorSetLayoutHandle INVALID_LAYOUT { INVALID_INDEX };
-static DescriptorSetHandle INVALID_SET { INVALID_INDEX };
-static PipelineHandle INVALID_PIPELINE { INVALID_INDEX };
+constexpr BufferHandle INVALID_BUFFER { INVALID_INDEX };
+constexpr TextureHandle INVALID_TEXTURE { INVALID_INDEX };
+constexpr ShaderStateHandle INVALID_SHADER { INVALID_INDEX };
+constexpr SamplerHandle INVALID_SAMPLER { INVALID_INDEX };
+constexpr DescriptorSetLayoutHandle INVALID_LAYOUT { INVALID_INDEX };
+constexpr DescriptorSetHandle INVALID_SET { INVALID_INDEX };
+constexpr PipelineHandle INVALID_PIPELINE { INVALID_INDEX };
 
 struct Rect2D 
 {

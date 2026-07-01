@@ -34,7 +34,7 @@ enum TextureAtlas
 	ATLAS_COUNT
 };
 
-static const char* sAtlasPaths[COUNT] =
+static constexpr const char* sAtlasPaths[COUNT] =
 {
 	"Assets/Textures/mainMenuUI.png"
 };

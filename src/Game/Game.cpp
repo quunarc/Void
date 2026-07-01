@@ -226,11 +226,6 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 gameCamera.resetPlayerCamera();
             }
 
-            if (isUIPressed(EXIT_BUTTON, inputHandler)) 
-            {
-                break;
-            }
-
             ////NOTE: This must be after the OS messages.
             //imgui->newFrame();
 
@@ -260,8 +255,8 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, *audioSystem);
 
-            gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-            //gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
+            //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
             
             deleteEntity();
@@ -287,8 +282,8 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             globalSceneData.project = gameCamera.internal3DCamera.projection;
             globalSceneData.eye = vec4s{ gameCamera.internal3DCamera.direction.x, gameCamera.internal3DCamera.direction.y, gameCamera.internal3DCamera.direction.z, 1.f };
             vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 10.f));
-            //globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
-            globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
+            globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
+            //globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             //Scene
             gpuCommands->bindPipeline(mainPipeline);
@@ -314,7 +309,6 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 {
                     if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
                     {
-                        EntityData physicsPosition{};
                         JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(entity.bodyID);
                         mat4s modelPosition = convertToMat4(newPos);
                         scene.entityData[entityIdx].position = modelPosition;

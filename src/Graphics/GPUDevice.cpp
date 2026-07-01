@@ -614,7 +614,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     createInfo.ppEnabledExtensionNames = REQUESTED_EXTENSIONS;
 
 #if defined(VULKAN_DEBUG_REPORT)
-    const VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = createDebugUtilsMessengerInfo();
+    createDebugUtilsMessengerInfo();
 
 #if defined(VULKAN_SYNCHRONIZATION_VALIDATION)
     const VkValidationFeatureEnableEXT featuresRequested[] =

@@ -295,7 +295,7 @@ void* StackAllocator::allocate(size_t size, size_t alignment, const char* file, 
 
 void* StackAllocator::reallocate(void* pointer, size_t size)
 {
-    VOID_ERROR("Not implemented");
+    VOID_ERROR("Not currently implemented.\n");
     return nullptr;
 }
 
@@ -356,6 +356,12 @@ void* DoubleStackAllocator::allocate(size_t size, size_t alignment, const char* 
 void DoubleStackAllocator::deallocate(void* pointer) 
 {
     VOID_ASSERTM(false, "You can't do that with a double stack allocator.");
+}
+
+void* DoubleStackAllocator::reallocate(void* pointer, size_t size)
+{
+    VOID_ERROR("Not currently implement.\n");
+    return nullptr;
 }
 
 void* DoubleStackAllocator::allocateTop(size_t size, size_t alignment) 

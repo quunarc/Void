@@ -79,10 +79,10 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
             //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
             inputHandler.update();
 
-            //I want the physics delta outside of the loop for now.
-            const int64_t currentTick = timeNow();
-            float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
-            beginFrameTick = currentTick;
+            //Current use of delta time for physics isn't used in the menu yet,
+            //const int64_t currentTick = timeNow();
+            //float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
+            //beginFrameTick = currentTick;
 
             CommandBuffer* gpuCommands = gpu->getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
             gpuCommands->pushMarker("Frame");
